@@ -5,6 +5,7 @@
  * then off for one second, repeatedly.
  */
 #include "Arduino.h"
+#include "Serial.h"
 
 void setup()
 {
@@ -25,4 +26,7 @@ void loop()
 
    // wait for a second
   delay(1000);
+
+  char buff[] = "hello world";
+  Serial.Print(buff, HEX);
 }
