@@ -12,13 +12,12 @@ const uint8_t GPPUB = 0x0D;
 const uint8_t GPIOA = 0x12;
 const uint8_t GPIOB = 0x13;
 
-const int ROW_PIN_START = 8;
-const int ROW_PIN_END = 9;//10;
-const int COL_PIN_START = 2;
-const int COL_PIN_END = 3;//7;
-
-const int ROW_LEN = 3;
+const int ROW_LEN = 4;
 const int COL_LEN = 12;
+const int N_ROW_PINS = 4;
+const int N_COL_PINS = 6;
+const int COL_PINS[] = {0, 1, 2, 3, 4, 5};
+const int ROW_PINS[] = {6, 7, 8, 9};
 const int FN_LEVELS = 4;
 
 //fn levels 0, 1, 2, 3 (3 is only for left half)
@@ -27,11 +26,13 @@ int fn_r = 0;
 
 int_stack free_usb_keys;
 
+const int ledPin = 13;
+
 key_elem_t key_map[COL_LEN*ROW_LEN*FN_LEVELS] =
 {
   //level 0
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
+  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, KEY_E, -1}, {HIGH, 0, KEY_R, -1}, {HIGH, 0, KEY_T, -1}, {HIGH, 0, KEY_U, -1},
+    {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_S, -1}, {HIGH, 0, KEY_D, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
   {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
     {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
   //level 1
@@ -53,30 +54,36 @@ key_elem_t key_map[COL_LEN*ROW_LEN*FN_LEVELS] =
 
 
 void init_main() {
-  //start serial connection
-  Serial.begin(9600);
-  //pins 2, 3, 4, 5, 6, 7 correspond to columns for the half with the mcu.
-  pinMode(2, INPUT_PULLUP);
-  pinMode(3, INPUT_PULLUP);
-  pinMode(4, INPUT_PULLUP);
-  pinMode(5, INPUT_PULLUP);
-  pinMode(6, INPUT_PULLUP);
-  pinMode(7, INPUT_PULLUP);
-  //pins 8, 9, 10 correspond to rows for the half with thew mcu.
-  pinMode(8, OUTPUT_OPENDRAIN);
-  pinMode(9, OUTPUT_OPENDRAIN);
-  pinMode(10, OUTPUT_OPENDRAIN);
+  Serial.println("Begin Init");
+ 
+  //Led used for debugging
+  pinMode(ledPin, OUTPUT);
   
+  //start serial connection
+  Serial.begin(38400);
+  //pins 0, 1, 2, 3, 4, 5 correspond to columns for the half with the mcu.
+  int r=0;
+  for (r;r<N_ROW_PINS;++r){
+    pinMode(ROW_PINS[r], OUTPUT);
+    digitalWrite(ROW_PINS[r], LOW);
+  }
+
+  int c = 0;
+  for (;c<N_COL_PINS;++c){
+    pinMode(COL_PINS[c], INPUT_PULLDOWN);
+    //digitalWrite(COL_PINS[c], LOW);
+  }
+
   // Setup for Master mode, pins 18/19, external pullups, 400kHz, 200ms default timeout
   Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_INT, 400000);
   Wire.setDefaultTimeout(200000); // 200ms
 
-  //free_usb_keys.push(6);
   free_usb_keys.push(5);
   free_usb_keys.push(4);
   free_usb_keys.push(3);
   free_usb_keys.push(2);
   free_usb_keys.push(1);
+  free_usb_keys.push(0);
 
   // configure the io expander
   delay(10);
@@ -104,6 +111,8 @@ void init_main() {
             Serial.print("i2c conf2 FAIL\n");
         else
             Serial.print("i2c conf2 OK\n");
+  
+  Serial.println("Finish Init");
 }
 
 unsigned int key_addr(int x, int y, int l){
@@ -112,15 +121,22 @@ unsigned int key_addr(int x, int y, int l){
   return offs+12*y+x;
 }
 
-void set_row_left(int row){
+void write_matrix_local(int row){
       //Serial.println(row_pin);
-    digitalWrite(8, HIGH);
-    digitalWrite(9, HIGH);
-    digitalWrite(10, HIGH);
-    digitalWrite(row + ROW_PIN_START, LOW);
+    int i=0;
+    int val = HIGH;
+    for (;i<ROW_LEN;++i)
+    {
+      if (i == row)
+        val = HIGH;
+      else
+        val = LOW;
+      digitalWrite(ROW_PINS[i], val);
+    }
+
 }
 
-void set_row_right(int row){
+void set_row_remote(int row){
   uint8_t output_row = 0xFE;
   output_row << row;
   
@@ -130,17 +146,18 @@ void set_row_right(int row){
   Wire.endTransmission();  
 }
 
-void get_row_right(int *row_buff){
+void get_row_remote(int *row_buff){
   Wire.beginTransmission(target_read);
   Wire.write(GPIOB);
   //Wire.requestFrom(target_read, row_buff);
   Wire.endTransmission();
 }
 
-void get_row_left(int *row_buff){
+void read_matrix_local(int *row_buff){
   int col;
   for (; col<COL_LEN; ++col){
-    row_buff[col] = digitalRead(COL_PIN_START + col);
+    int col_pin = COL_PINS[col];
+    row_buff[col] = digitalRead(col_pin);
   }
 }
 
@@ -186,33 +203,12 @@ void set_usb(key_elem_t *k, int usb_key){
   Keyboard.set_modifier(modifier);
 
   int key = 0;
-  if (k->val == LOW)
+  if (k->val == HIGH)
   {
     key = k->normal_key;
   }
-  
-  switch(usb_key)
-  {
-    case 0:
-      break;
-    case 1:
-      Keyboard.set_key2(key);
-      break;
-    case 2:
-      Keyboard.set_key3(key);
-      break;
-    case 3:
-      Keyboard.set_key4(key);
-      break;
-    case 4:
-      Keyboard.set_key5(key);
-      break;
-    case 5:
-      Keyboard.set_key6(key);
-      break;
-    default:
-      ;
-  }
+
+  keyboard_keys[usb_key] = key;
 }
 
 void send_usb(){
@@ -225,26 +221,29 @@ void run_main() {
   
   int row = 0;
   for (;row<ROW_LEN;++row){
-    set_row_right(row);
-    set_row_left(row);
-    get_row_right(row_buff);
-    get_row_left(row_buff + COL_LEN/2);
-    
+    //set_row_remote(row);
+    write_matrix_local(row);
+    //get_row_remote(row_buff);
+    read_matrix_local(row_buff);
+
     int col = 0;
     for (;col<COL_LEN;++col){
       key_elem_t *k = get_key(row, col, fn_l, row_buff);
       int key_val = row_buff[col];
       if (key_val !=  k->val){
+        Serial.print(col);
+        Serial.print("  ");
+        Serial.print(row);
+        Serial.println("");
         int usb_key = set_key(k, key_val);
         set_usb(k, usb_key);
         send_usb();
       }
       else{
         //nothing has changed, do nothing.
-        ;
       }
     }
   }
   
-  delay(50);
+  delay(10);  
 }
