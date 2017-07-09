@@ -1,12 +1,7 @@
-
-typedef struct _key_elem_t{
-  //val == LOW means the key is pressed
-  //val == HIGH means the key is pressed
-  int val;
-  int modifier;
-  int normal_key;
+typedef struct key_val_t{
+  int hid_code;
   int usb_key;
-}key_elem_t;
+}key_val_t;
 
 
 class int_stack{
@@ -38,13 +33,14 @@ public:
 
 void init_main();
 unsigned int key_addr(int x, int y, int l);
-key_elem_t *get_key(int row_pin, int col_pin, int fn_l);
+key_val_t *get_key(int row_pin, int col_pin, int fn_l);
 int set_key(key_elem_t *k, int val);
 void reset_usb();
-void set_usb(key_elem_t *k, int usb_key);
+void set_usb(key_val_t *k, int usb_key);
 void set_row_left(int row);
 void set_row_right(int row);
 void get_row_left(int *row_buff);
 void get_row_right(int *row_buff);
-key_elem_t *get_key(int row, int col);
+bool get_key_status(int row, int col);
+key_val_t *get_key(int row, int col);
 void run_main();

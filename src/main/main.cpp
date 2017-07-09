@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include "main.h"
 #include <i2c_t3.h>
+#include "key_codes.h"
 
 const uint8_t target_write = 0x4E;
 const uint8_t target_read = 0x4F;
@@ -28,29 +29,58 @@ int_stack free_usb_keys;
 
 const int ledPin = 13;
 
-key_elem_t key_map[COL_LEN*ROW_LEN*FN_LEVELS] =
+//dvorak
+//1234567890[]
+//',.pyfgcrl/=
+//aoeuidhtns-\
+//;qjkxbmwvz
+//swedish
+//1234567890+´
+//qwertyuiopå¨
+//asdfghjklöä'
+//<zxcvbnm,.-
+//us
+//...
+key_val_t key_map[COL_LEN*ROW_LEN*FN_LEVELS] =
 {
   //level 0
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, KEY_E, -1}, {HIGH, 0, KEY_R, -1}, {HIGH, 0, KEY_T, -1}, {HIGH, 0, KEY_U, -1},
-    {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_S, -1}, {HIGH, 0, KEY_D, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-  {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
+  {0, KEY_SW_QUOTE}, {0, KEY_SW_COMMA}, {0, KEY_SW_PUNCT}, {0, KEY_P}, {0, KEY_Y},
+    {0, KEY_F}, {0, KEY_G}, {0, KEY_C}, {0, KEY_R}, {0, KEY_L}, {MODIFIERKEY_SHIFT, KEY_7}, {MODIFIERKEY_SHIFT, KEY_0},
+  {0, KEY_A}, {0, KEY_O}, {0, KEY_E}, {0, KEY_U}, {0, KEY_I}, {0, KEY_D},
+    {0, KEY_H}, {0, KEY_T}, {0, KEY_N}, {0, KEY_S}, {0, KEY_SW_KEY_HYPH}, {0, KEY_SW_PLUS},
+  {MODIFIERKEY_SHIFT, KEY_COMMA}, {0, KEY_Q}, {0, KEY_J}, {0, KEY_K}, {0, KEY_X},
+    {0, KEY_B}, {0, KEY_M}, {0, KEY_W}, {0, KEY_V}, {0, KEY_Z},
   //level 1
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
   //level 2
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-  //level 3
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-  {HIGH, 0, KEY_Q, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},
-    {HIGH, 0, KEY_A, -1}, {HIGH, 0, KEY_W, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1}, {HIGH, 0, 0, -1},  
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    //level 3
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+   //level 4
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
 };
+
+bool key_status[COL_LEN*ROW_LEN] = {0};
 
 
 void init_main() {
@@ -170,7 +200,7 @@ key_elem_t *get_key(int row, int col, int fn_l, int *row_buff){
 }
 
 
-int set_key(key_elem_t *k, int val){
+int get_free_usb_key(key_elem_t *k, int val){
   int prev_val = k->val;
   int usb_key = -1;
   
