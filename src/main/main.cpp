@@ -16,15 +16,15 @@ const uint8_t GPPUB = 0x0D;
 const uint8_t GPIOA = 0x12;
 const uint8_t GPIOB = 0x13;
 
-const int ROW_LEN = 4;
-const int COL_LEN = 12;
+const int N_ROWS = 4;
+const int N_COLS = 12;
 const int N_ROW_PINS = 4;
 const int N_COL_PINS = 6;
 const int COL_PINS[] = {0, 1, 2, 3, 4, 5};
 const int ROW_PINS[] = {6, 7, 8, 9};
 const int LED_PIN = 13;
 
-const int fn_layerS = 4;
+const int N_FN_LAYERS = 4;
 const int MAX_N_USB_KEYS = 6;
 
 //fn levels 0, 1, 2, 3
@@ -51,15 +51,15 @@ int modifier = 0;
   us
   ...
 */
-key_data_t key_map[COL_LEN*ROW_LEN*fn_layerS] =
+key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
 {
   //level 0
   {0, KEY_SW_QUOTE}, {0, KEY_SW_COMMA}, {0, KEY_SW_PUNCT}, {0, KEY_P}, {0, KEY_Y}, {0, KEY_F},
     {0, KEY_G}, {0, KEY_C}, {0, KEY_R}, {0, KEY_L}, {MODIFIERKEY_SHIFT, KEY_7}, {MODIFIERKEY_SHIFT, KEY_0},
   {0, KEY_A}, {0, KEY_O}, {0, KEY_E}, {0, KEY_U}, {0, KEY_I}, {0, KEY_D},
     {0, KEY_H}, {0, KEY_T}, {0, KEY_N}, {0, KEY_S}, {0, KEY_SW_HYPH}, {0, KEY_SW_PLUS},
-  {MODIFIERKEY_SHIFT, KEY_COMMA}, {0, KEY_Q}, {0, KEY_J}, {0, KEY_K}, {0, KEY_X}, {0, 0},
-    {0, KEY_B}, {0, KEY_M}, {0, KEY_W}, {0, KEY_V}, {0, KEY_Z}, {0, 0},
+  {MODIFIERKEY_SHIFT, KEY_COMMA}, {0, KEY_Q}, {0, KEY_J}, {0, KEY_K}, {0, KEY_X}, {0, KEY_BACKSPACE},
+    {0, KEY_B}, {0, KEY_M}, {0, KEY_W}, {0, KEY_V}, {0, KEY_Z}, {0, KEY_ENTER},
   //level 1
   {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
@@ -90,10 +90,10 @@ key_data_t key_map[COL_LEN*ROW_LEN*fn_layerS] =
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}
 };
 
-int key_status[COL_LEN*ROW_LEN];
+int key_status[N_COLS*N_ROWS];
 
 unsigned int key_address(int col, int row, int layer){
-  return layer*COL_LEN*ROW_LEN + row*ROW_LEN + col;
+  return layer*N_COLS*N_ROWS + row*N_COLS + col;
 }
 
 void set_int_array(int *arr, size_t n_elems, int val){
@@ -101,6 +101,15 @@ void set_int_array(int *arr, size_t n_elems, int val){
   for (;i<n_elems;++i){
     arr[i] = val;
   }  
+}
+
+void print_int_array(int *arr, size_t n_elems){
+  size_t i=0;
+  for (;i<n_elems;++i){
+    Serial.print(arr[i]);
+    Serial.print(", ");
+  }
+  Serial.println("");
 }
 
 void init_main() {
@@ -161,7 +170,7 @@ void init_main() {
         else
             Serial.print("i2c conf2 OK\n");
 
-  set_int_array(key_status, COL_LEN*ROW_LEN, 0);
+  set_int_array(key_status, N_COLS*N_ROWS, 0);
   
   Serial.println("Finish Init");
 }
@@ -170,7 +179,7 @@ void init_main() {
 void write_matrix_local(int row){
     int i=0;
     int val = HIGH;
-    for (;i<ROW_LEN;++i)
+    for (;i<N_ROW_PINS;++i)
     {
       if (i == row)
         val = HIGH;
@@ -277,19 +286,20 @@ void activate_hooks(){
 }
 
 void run_main() {
-  int row_buff[COL_LEN] = {0};
-  set_int_array(row_buff, COL_LEN, LOW);
+  int row_buff[N_COLS] = {0};
+  set_int_array(row_buff, N_COLS, LOW);
   
   int row = 0;
-  for (;row<ROW_LEN;++row){
+  for (;row<N_ROWS;++row){
     //set_row_remote(row);
     write_matrix_local(row);
     //get_row_remote(row_buff);
     read_matrix_local(row_buff);
 
+    //print_int_array(row_buff, N_COLS);
     
     int col = 0;
-    for (;col<COL_LEN/2;++col){
+    for (;col<N_COLS;++col){
       int hid_code=0;
       int key_state = row_buff[col]; //HIGH, LOW
       int old_usb_key = get_key_status(col, row); //-1, 0, 1, 2, 3, 4, 5
@@ -300,7 +310,7 @@ void run_main() {
         Serial.print(col);
         Serial.print("  ");
         Serial.print(row);
-        Serial.println(" A");
+        Serial.println(" B");
         int usb_key;
         if (key_state == HIGH){
           Serial.println("KEY DOWN");
