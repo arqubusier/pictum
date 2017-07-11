@@ -3,6 +3,9 @@
 #include <i2c_t3.h>
 #include "key_codes.h"
 
+const int UNASSIGNED_USB_KEY = -1;
+const int HID_RELEASED = 0;
+
 const uint8_t target_write = 0x4E;
 const uint8_t target_read = 0x4F;
 //NOTE: values valid when IOCON.BANK = 0 on MCP23018
@@ -21,32 +24,34 @@ const int COL_PINS[] = {0, 1, 2, 3, 4, 5};
 const int ROW_PINS[] = {6, 7, 8, 9};
 const int LED_PIN = 13;
 
-const int FN_LEVELS = 4;
+const int fn_layerS = 4;
 const int MAX_N_USB_KEYS = 6;
 
 //fn levels 0, 1, 2, 3
 int fn_l = 0;
 int fn_r = 0;
-int fn_level = 0;
+int fn_layer = 0;
 int n_pressed_keys = 0;
 
 int_stack free_usb_keys;
 
 int modifier = 0;
 
-//dvorak
-//1234567890[]
-//',.pyfgcrl/=
-//aoeuidhtns-\
-//;qjkxbmwvz
-//swedish
-//1234567890+´
-//qwertyuiopå¨
-//asdfghjklöä'
-//<zxcvbnm,.-
-//us
-//...
-key_data_t key_map[COL_LEN*ROW_LEN*FN_LEVELS] =
+/*
+  dvorak
+  1234567890[]
+  ',.pyfgcrl/=
+  aoeuidhtns-\
+  ;qjkxbmwvz
+  swedish
+  1234567890+´
+  qwertyuiopå¨
+  asdfghjklöä'
+  <zxcvbnm,.-
+  us
+  ...
+*/
+key_data_t key_map[COL_LEN*ROW_LEN*fn_layerS] =
 {
   //level 0
   {0, KEY_SW_QUOTE}, {0, KEY_SW_COMMA}, {0, KEY_SW_PUNCT}, {0, KEY_P}, {0, KEY_Y}, {0, KEY_F},
@@ -84,8 +89,19 @@ key_data_t key_map[COL_LEN*ROW_LEN*FN_LEVELS] =
   {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}
 };
-int key_status[COL_LEN*ROW_LEN] = {-1};
 
+int key_status[COL_LEN*ROW_LEN];
+
+unsigned int key_address(int col, int row, int layer){
+  return layer*COL_LEN*ROW_LEN + row*ROW_LEN + col;
+}
+
+void set_int_array(int *arr, size_t n_elems, int val){
+  size_t i=0;
+  for (;i<n_elems;++i){
+    arr[i] = val;
+  }  
+}
 
 void init_main() {
   Serial.println("Begin Init");
@@ -97,7 +113,7 @@ void init_main() {
   Serial.begin(38400);
   //pins 0, 1, 2, 3, 4, 5 correspond to columns for the half with the mcu.
   int r=0;
-  for (r;r<N_ROW_PINS;++r){
+  for (;r<N_ROW_PINS;++r){
     pinMode(ROW_PINS[r], OUTPUT);
     digitalWrite(ROW_PINS[r], LOW);
   }
@@ -105,7 +121,6 @@ void init_main() {
   int c = 0;
   for (;c<N_COL_PINS;++c){
     pinMode(COL_PINS[c], INPUT_PULLDOWN);
-    //digitalWrite(COL_PINS[c], LOW);
   }
 
   // Setup for Master mode, pins 18/19, external pullups, 400kHz, 200ms default timeout
@@ -146,22 +161,13 @@ void init_main() {
         else
             Serial.print("i2c conf2 OK\n");
 
-  int i=0;
-  for (;i<COL_LEN*ROW_LEN;++i){
-    key_status[i] = -1;
-  }
+  set_int_array(key_status, COL_LEN*ROW_LEN, 0);
   
   Serial.println("Finish Init");
 }
 
-unsigned int key_addr(int x, int y, int l){
-  int offs = l*(12*3);
-  
-  return offs+12*y+x;
-}
 
 void write_matrix_local(int row){
-      //Serial.println(row_pin);
     int i=0;
     int val = HIGH;
     for (;i<ROW_LEN;++i)
@@ -177,7 +183,7 @@ void write_matrix_local(int row){
 
 void set_row_remote(int row){
   uint8_t output_row = 0xFE;
-  output_row << row;
+  output_row <<= row;
   
   Wire.beginTransmission(target_write);
   Wire.write(GPIOA);
@@ -193,9 +199,10 @@ void get_row_remote(int *row_buff){
 }
 
 void read_matrix_local(int *row_buff){
-  int col;
-  for (; col<COL_LEN; ++col){
-    int col_pin = COL_PINS[col];
+  int col=0;
+  int col_pin=0;
+  for (; col<N_COL_PINS; ++col){
+    col_pin = COL_PINS[col];
     row_buff[col] = digitalRead(col_pin);
   }
 }
@@ -212,12 +219,16 @@ void send_usb(){
   Keyboard.send_now();
 }
 
-int get_key_status(int row, int col){
-  return key_status[row*ROW_LEN + col];
+int get_key_status(int col, int row){
+  return key_status[key_address(col, row, 0)];
 }
 
-key_data_t get_key_data(int row, int col){
-  return key_map[fn_level*ROW_LEN*COL_LEN*(row*ROW_LEN + col)];
+void set_status(int col, int row, int usb_key){
+  key_status[key_address(col, row, 0)] = usb_key;
+}
+
+key_data_t get_key_data(int col, int row){
+  return key_map[key_address(col,row,fn_layer)];
 }
 
 bool should_update(int key_state, int old_status, int new_modifier){
@@ -229,7 +240,7 @@ bool should_update(int key_state, int old_status, int new_modifier){
 
   if ( 
       //Now: pressed, before: unassigned 
-      (key_state == HIGH && old_status == -1)
+      (key_state == HIGH && old_status == UNASSIGNED_USB_KEY)
       //Now: up, before: pressed and assigned
       ||(key_state == LOW && old_status >= 0 )
      ){
@@ -241,7 +252,7 @@ bool should_update(int key_state, int old_status, int new_modifier){
     return true;
   }
 
-  if (modifier | new_modifier != modifier){
+  if ((modifier | new_modifier) != modifier){
     //Serial.print("Modifier");
     //Serial.print(modifier);
     //return true;    
@@ -253,16 +264,12 @@ bool should_update(int key_state, int old_status, int new_modifier){
 void set_usb_key(int usb_key, int hid_code, int new_modifier){
   if (usb_key >= 0 and usb_key <= MAX_N_USB_KEYS){
     keyboard_keys[usb_key] = hid_code;
-    if (hid_code == 0)
+    if (hid_code == HID_RELEASED)
       free_usb_keys.push(usb_key);
   }
 
   modifier |= new_modifier;
   Keyboard.set_modifier(modifier);
-}
-
-void set_status(int col, int row, int hid_code){
-  key_status[ROW_LEN*row + col] = hid_code;
 }
 
 void activate_hooks(){
@@ -271,9 +278,10 @@ void activate_hooks(){
 
 void run_main() {
   int row_buff[COL_LEN] = {0};
+  set_int_array(row_buff, COL_LEN, LOW);
   
   int row = 0;
-  for (;row<1;++row){
+  for (;row<ROW_LEN;++row){
     //set_row_remote(row);
     write_matrix_local(row);
     //get_row_remote(row_buff);
@@ -281,26 +289,18 @@ void run_main() {
 
     
     int col = 0;
-    for (;col<2;++col){
+    for (;col<COL_LEN/2;++col){
       int hid_code=0;
       int key_state = row_buff[col]; //HIGH, LOW
       int old_usb_key = get_key_status(col, row); //-1, 0, 1, 2, 3, 4, 5
-      key_data_t key_data = get_key_data(row, col);
+      key_data_t key_data = get_key_data(col, row);
       int new_modifier = key_data.modifier;
-
-//      if (key_state == HIGH){
-//        Serial.print("c ");
-//        Serial.print(col);
-//        Serial.print(" r");
-//        Serial.print(row);
-//        Serial.println(" PRESSED");
-//      }
       
       if (should_update(key_state, old_usb_key, new_modifier)){
         Serial.print(col);
         Serial.print("  ");
         Serial.print(row);
-        Serial.println(" 1");
+        Serial.println(" A");
         int usb_key;
         if (key_state == HIGH){
           Serial.println("KEY DOWN");
@@ -311,7 +311,7 @@ void run_main() {
         }
         else{
           Serial.println("KEY UP");
-          set_usb_key(old_usb_key, 0, new_modifier);
+          set_usb_key(old_usb_key, HID_RELEASED, new_modifier);
           usb_key = -1;
           --n_pressed_keys;
         }
