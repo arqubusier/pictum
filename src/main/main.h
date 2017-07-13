@@ -3,10 +3,18 @@ typedef struct key_data_t{
   int hid_code;
 }key_data_t;
 
+typedef struct key_status_t{
+  //The current effect the key has on the modifiers
+  int modifier;
+  //The index in the reported usb_keys if it has been been previously assigned
+  //UNASSIGNED_USB_KEY otherwise.
+  int usb_key;
+};
+
 
 class int_stack{
 private:
-  static const int MAX_LEN = 6;
+  static const int MAX_LEN = 48;
   int head;
   const int EMPTY = -1;
   int arr[MAX_LEN];

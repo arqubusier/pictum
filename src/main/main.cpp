@@ -3,7 +3,8 @@
 #include <i2c_t3.h>
 #include "key_codes.h"
 
-const int UNASSIGNED_USB_KEY = -1;
+const int UNASSIGNED_DOWN = -2;
+const int UNASSIGNED_UP = -1;
 const int HID_RELEASED = 0;
 
 const uint8_t target_write = 0x4E;
@@ -35,7 +36,8 @@ int n_pressed_keys = 0;
 
 int_stack free_usb_keys;
 
-int modifier = 0;
+//Counters for all modifiers showing how many keys affect them 
+int modifier_counters[N_MODIFIERS] = {0};
 
 /*
   dvorak
@@ -54,12 +56,12 @@ int modifier = 0;
 key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
 {
   //level 0
-  {0, KEY_SW_QUOTE}, {0, KEY_SW_COMMA}, {0, KEY_SW_PUNCT}, {0, KEY_P}, {0, KEY_Y}, {0, KEY_F},
-    {0, KEY_G}, {0, KEY_C}, {0, KEY_R}, {0, KEY_L}, {MODIFIERKEY_SHIFT, KEY_7}, {MODIFIERKEY_SHIFT, KEY_0},
-  {0, KEY_A}, {0, KEY_O}, {0, KEY_E}, {0, KEY_U}, {0, KEY_I}, {0, KEY_D},
-    {0, KEY_H}, {0, KEY_T}, {0, KEY_N}, {0, KEY_S}, {0, KEY_SW_HYPH}, {0, KEY_SW_PLUS},
-  {MODIFIERKEY_SHIFT, KEY_COMMA}, {0, KEY_Q}, {0, KEY_J}, {0, KEY_K}, {0, KEY_X}, {0, KEY_BACKSPACE},
-    {0, KEY_B}, {0, KEY_M}, {0, KEY_W}, {0, KEY_V}, {0, KEY_Z}, {0, KEY_ENTER},
+  {MODIFIER_NONE, KEY_SW_QUOTE}, {MODIFIER_NONE, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_PUNCT}, {MODIFIER_NONE, KEY_P}, {MODIFIER_NONE, KEY_Y}, {MODIFIER_NONE, KEY_F},
+    {MODIFIER_NONE, KEY_G}, {MODIFIER_NONE, KEY_C}, {MODIFIER_NONE, KEY_R}, {MODIFIER_NONE, KEY_L}, {MODIFIER_LSHIFT, KEY_7}, {MODIFIER_LSHIFT, KEY_0},
+  {MODIFIER_NONE, KEY_A}, {MODIFIER_NONE, KEY_O}, {MODIFIER_NONE, KEY_E}, {MODIFIER_NONE, KEY_U}, {MODIFIER_NONE, KEY_I}, {MODIFIER_NONE, KEY_D},
+    {MODIFIER_NONE, KEY_H}, {MODIFIER_NONE, KEY_T}, {MODIFIER_NONE, KEY_N}, {MODIFIER_NONE, KEY_S}, {MODIFIER_NONE, KEY_SW_HYPH}, {MODIFIER_NONE, KEY_SW_PLUS},
+  {MODIFIER_LSHIFT, KEY_COMMA}, {MODIFIER_NONE, KEY_Q}, {MODIFIER_NONE, KEY_J}, {MODIFIER_NONE, KEY_K}, {MODIFIER_NONE, KEY_X}, {MODIFIER_NONE, KEY_BACKSPACE},
+    {MODIFIER_NONE, KEY_B}, {MODIFIER_NONE, KEY_M}, {MODIFIER_NONE, KEY_W}, {MODIFIER_NONE, KEY_V}, {MODIFIER_NONE, KEY_Z}, {MODIFIER_NONE, KEY_ENTER},
   //level 1
   {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
@@ -91,6 +93,7 @@ key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
 };
 
 int key_status[N_COLS*N_ROWS];
+unsigned int modifier;
 
 unsigned int key_address(int col, int row, int layer){
   return layer*N_COLS*N_ROWS + row*N_COLS + col;
@@ -101,6 +104,10 @@ void set_int_array(int *arr, size_t n_elems, int val){
   for (;i<n_elems;++i){
     arr[i] = val;
   }  
+}
+
+void reset_key_statuses(){
+  set_int_array(key_status, N_COLS*N_ROWS, UNASSIGNED_UP);
 }
 
 void print_int_array(int *arr, size_t n_elems){
@@ -170,8 +177,9 @@ void init_main() {
         else
             Serial.print("i2c conf2 OK\n");
 
-  set_int_array(key_status, N_COLS*N_ROWS, 0);
-  
+  reset_key_statuses();
+  set_int_array(modifier_counters, N_MODIFIERS, 0);
+  modifier=0;
   Serial.println("Finish Init");
 }
 
@@ -217,11 +225,15 @@ void read_matrix_local(int *row_buff){
 }
 
 
-int get_free_usb_key(){
+int get_free_key_nr(){
   if (free_usb_keys.empty())
     return -1;
    
   return free_usb_keys.pop();
+}
+
+void return_key_nr(int key_nr){
+  free_usb_keys.push(key_nr);
 }
 
 void send_usb(){
@@ -240,16 +252,10 @@ key_data_t get_key_data(int col, int row){
   return key_map[key_address(col,row,fn_layer)];
 }
 
-bool should_update(int key_state, int old_status, int new_modifier){
-  //Cannot press any more keys
-  if (key_state == HIGH && n_pressed_keys >= 6){
-    return false;
-  }
-
-
+bool should_update(int key_state, int old_status){
   if ( 
       //Now: pressed, before: unassigned 
-      (key_state == HIGH && old_status == UNASSIGNED_USB_KEY)
+      (key_state == HIGH && old_status == UNASSIGNED_UP)
       //Now: up, before: pressed and assigned
       ||(key_state == LOW && old_status >= 0 )
      ){
@@ -261,24 +267,43 @@ bool should_update(int key_state, int old_status, int new_modifier){
     return true;
   }
 
-  if ((modifier | new_modifier) != modifier){
-    //Serial.print("Modifier");
-    //Serial.print(modifier);
-    //return true;    
-  }
-
   return false;
 }
 
-void set_usb_key(int usb_key, int hid_code, int new_modifier){
+bool set_usb_key(int usb_key, int value){
   if (usb_key >= 0 and usb_key <= MAX_N_USB_KEYS){
-    keyboard_keys[usb_key] = hid_code;
-    if (hid_code == HID_RELEASED)
-      free_usb_keys.push(usb_key);
+    keyboard_keys[usb_key] = value;
+    return true;
+  }
+  return false;
+}
+
+unsigned int update_modifiers(int key_state, int modifier){
+  unsigned int res = 0;
+   
+  if (modifier != MODIFIER_NONE){
+    int counter = modifier_counters[modifier];
+    if (key_state == HIGH){
+      
+      if (counter == 0){
+        bitSet(res, modifier);
+      }
+        
+      modifier_counters[modifier] = counter + 1;
+    }
+    else{
+      if (counter == 1){
+        bitClear(res,modifier);
+      }
+      modifier_counters[modifier] = counter - 1;
+    }
   }
 
-  modifier |= new_modifier;
-  Keyboard.set_modifier(modifier);
+  Serial.println("MODIFIERS after");
+
+  print_int_array(modifier_counters, N_MODIFIERS);
+  Serial.println(res, BIN);
+  return res;
 }
 
 void activate_hooks(){
@@ -286,6 +311,7 @@ void activate_hooks(){
 }
 
 void run_main() {
+  
   int row_buff[N_COLS] = {0};
   set_int_array(row_buff, N_COLS, LOW);
   
@@ -300,45 +326,64 @@ void run_main() {
     
     int col = 0;
     for (;col<N_COLS;++col){
-      int hid_code=0;
       int key_state = row_buff[col]; //HIGH, LOW
-      int old_usb_key = get_key_status(col, row); //-1, 0, 1, 2, 3, 4, 5
+      int key_nr = get_key_status(col, row); //-1, 0, 1, 2, 3, 4, 5
+      int next_key_nr = UNASSIGNED_UP;
       key_data_t key_data = get_key_data(col, row);
-      int new_modifier = key_data.modifier;
       
-      if (should_update(key_state, old_usb_key, new_modifier)){
+      if (should_update(key_state, key_nr)){
         Serial.print(col);
         Serial.print("  ");
         Serial.print(row);
         Serial.println(" B");
-        int usb_key;
+        int usb_key_value=0;
+        bool should_update_usb = false;
+        
         if (key_state == HIGH){
           Serial.println("KEY DOWN");
-          usb_key = get_free_usb_key();
-          hid_code = key_data.hid_code;
-          set_usb_key(usb_key, hid_code, new_modifier);
+          key_nr = get_free_key_nr();
+          next_key_nr = key_nr;
+          usb_key_value = key_data.hid_code;
           ++n_pressed_keys;
         }
         else{
           Serial.println("KEY UP");
-          set_usb_key(old_usb_key, HID_RELEASED, new_modifier);
-          usb_key = -1;
+          return_key_nr(key_nr);     
+          next_key_nr = UNASSIGNED_UP;
+          usb_key_value = HID_RELEASED;
           --n_pressed_keys;
         }
-        Serial.print("usb_key ");
-        Serial.print(usb_key);
-        Serial.print(" hid_code ");
-        Serial.print(hid_code);
+
+        should_update_usb = set_usb_key(key_nr, usb_key_value);        
+        Serial.print("key_nr ");
+        Serial.print(key_nr);
+        Serial.print(" usb_key ");
+        Serial.print(usb_key_value);
         Serial.println(" 3");
-        set_status(col, row, usb_key);
+
+        unsigned int new_modifier = update_modifiers(key_state, key_data.modifier);
+        
+        Serial.print("new_modifier ");
+        Serial.print(new_modifier, BIN);
+        Serial.print("modifier");
+        Serial.println(modifier, BIN);
+        if (new_modifier != modifier){
+          Serial.println("Update modifier");
+          should_update_usb = true;
+          modifier=new_modifier;
+          Keyboard.set_modifier(new_modifier);
+        }
+          
         activate_hooks();
-        send_usb();
-      }
-      else{
-        //nothing has changed, do nothing.
+        
+        if (should_update_usb){
+          send_usb(); 
+        }
+
+        Serial.print("next status");
+        Serial.println(next_key_nr);
+        set_status(col, row, next_key_nr);
       }
     }
-  }
-  
-  delay(10);  
+  }  
 }
