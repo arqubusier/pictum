@@ -17,6 +17,8 @@ const uint8_t GPPUB = 0x0D;
 const uint8_t GPIOA = 0x12;
 const uint8_t GPIOB = 0x13;
 
+const int HID_MAX = 256;
+
 const int N_ROWS = 4;
 const int N_COLS = 12;
 const int N_ROW_PINS = 4;
@@ -26,6 +28,7 @@ const int ROW_PINS[] = {6, 7, 8, 9};
 const int LED_PIN = 13;
 
 const int N_FN_LAYERS = 4;
+const int DEFAULT_FN_LAYER = 0;
 const int MAX_N_USB_KEYS = 6;
 
 //fn levels 0, 1, 2, 3
@@ -56,12 +59,14 @@ int modifier_counters[N_MODIFIERS] = {0};
 key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
 {
   //level 0
-  {MODIFIER_NONE, KEY_SW_QUOTE}, {MODIFIER_NONE, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_PUNCT}, {MODIFIER_NONE, KEY_P}, {MODIFIER_NONE, KEY_Y}, {MODIFIER_NONE, KEY_F},
-    {MODIFIER_NONE, KEY_G}, {MODIFIER_NONE, KEY_C}, {MODIFIER_NONE, KEY_R}, {MODIFIER_NONE, KEY_L}, {MODIFIER_LSHIFT, KEY_7}, {MODIFIER_LSHIFT, KEY_0},
-  {MODIFIER_NONE, KEY_A}, {MODIFIER_NONE, KEY_O}, {MODIFIER_NONE, KEY_E}, {MODIFIER_NONE, KEY_U}, {MODIFIER_NONE, KEY_I}, {MODIFIER_NONE, KEY_D},
-    {MODIFIER_NONE, KEY_H}, {MODIFIER_NONE, KEY_T}, {MODIFIER_NONE, KEY_N}, {MODIFIER_NONE, KEY_S}, {MODIFIER_NONE, KEY_SW_HYPH}, {MODIFIER_NONE, KEY_SW_PLUS},
-  {MODIFIER_LSHIFT, KEY_COMMA}, {MODIFIER_NONE, KEY_Q}, {MODIFIER_NONE, KEY_J}, {MODIFIER_NONE, KEY_K}, {MODIFIER_NONE, KEY_X}, {MODIFIER_NONE, KEY_BACKSPACE},
-    {MODIFIER_NONE, KEY_B}, {MODIFIER_NONE, KEY_M}, {MODIFIER_NONE, KEY_W}, {MODIFIER_NONE, KEY_V}, {MODIFIER_NONE, KEY_Z}, {MODIFIER_NONE, KEY_ENTER},
+  {MODIFIER_NONE, KEY_SW_QUOTE}, {MODIFIER_NONE, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_PUNCT}, {MODIFIER_NONE, KEY_SW_P}, {MODIFIER_NONE, KEY_SW_Y}, {MODIFIER_NONE, KEY_SW_ENTER},
+    {MODIFIER_NONE, KEY_ENTER}, {MODIFIER_NONE, KEY_SW_F}, {MODIFIER_NONE, KEY_SW_G}, {MODIFIER_NONE, KEY_SW_C}, {MODIFIER_NONE, KEY_SW_R}, {MODIFIER_NONE, KEY_SW_L},
+  {MODIFIER_NONE, KEY_SW_A}, {MODIFIER_NONE, KEY_SW_O}, {MODIFIER_NONE, KEY_SW_E}, {MODIFIER_NONE, KEY_SW_U}, {MODIFIER_NONE, KEY_SW_I}, {MODIFIER_NONE, KEY_SW_SPACE},
+    {MODIFIER_NONE, KEY_SW_D}, {MODIFIER_NONE, KEY_SW_H}, {MODIFIER_NONE, KEY_SW_T}, {MODIFIER_NONE, KEY_SW_N}, {MODIFIER_NONE, KEY_SW_S}, {MODIFIER_NONE, KEY_SW_HYPH},
+  {MODIFIER_LSHIFT, KEY_COMMA}, {MODIFIER_NONE, KEY_SW_Q}, {MODIFIER_NONE, KEY_SW_J}, {MODIFIER_NONE, KEY_SW_K}, {MODIFIER_NONE, KEY_SW_X}, {MODIFIER_NONE, KEY_SW_BACKSPACE},
+    {MODIFIER_NONE, KEY_SW_B}, {MODIFIER_NONE, KEY_SW_M}, {MODIFIER_NONE, KEY_SW_W}, {MODIFIER_NONE, KEY_SW_V}, {MODIFIER_NONE, KEY_SW_Z}, {MODIFIER_NONE, KEY_SW_ENTER},
+  {0, 0}, {0, KEY_SW_LEFT}, {0, KEY_SW_UP}, {0, KEY_SW_RIGHT}, {0, 0}, {0, 0}, 
+    {0, KEY_SW_DOWN}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
   //level 1
   {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, 
@@ -270,8 +275,10 @@ bool should_update(int key_state, int old_status){
   return false;
 }
 
+//TODO MAKE NON USB_KEYS DONT COUNT TOWARDS PRESSED KEYS
 bool set_usb_key(int usb_key, int value){
-  if (usb_key >= 0 and usb_key <= MAX_N_USB_KEYS){
+  if (usb_key >= 0 && usb_key <= MAX_N_USB_KEYS
+        && value<HID_MAX){
     keyboard_keys[usb_key] = value;
     return true;
   }
@@ -306,8 +313,27 @@ unsigned int update_modifiers(int key_state, int modifier){
   return res;
 }
 
-void activate_hooks(){
-  ;
+void handle_special_keys(int key_state, key_data_t key_data){
+  int key_value = key_data.hid_code;
+  int layer = 0;
+  
+  if (key_value == KEY_FN_LAYER1){
+    layer = 1;
+  }
+  else if (key_value == KEY_FN_LAYER2){
+    layer = 2;
+  }
+  else if (key_value == KEY_FN_LAYER3){
+    layer = 3;
+  }
+  else if (key_value == KEY_FN_LAYER4){
+    layer = 4;
+  }
+
+  if (key_state == HIGH)
+    fn_layer = layer;
+  else
+    fn_layer = DEFAULT_FN_LAYER;
 }
 
 void run_main() {
@@ -373,8 +399,8 @@ void run_main() {
           modifier=new_modifier;
           Keyboard.set_modifier(new_modifier);
         }
-          
-        activate_hooks();
+
+        handle_special_keys(key_state, key_data);
         
         if (should_update_usb){
           send_usb(); 
