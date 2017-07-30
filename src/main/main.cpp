@@ -3,6 +3,8 @@
 #include <i2c_t3.h>
 #include "key_codes.h"
 
+#define DEBUG
+
 const int UNASSIGNED_DOWN = -2;
 const int UNASSIGNED_UP = -1;
 const int HID_RELEASED = 0;
@@ -41,6 +43,62 @@ int_stack free_usb_keys;
 
 //Counters for all modifiers showing how many keys affect them 
 int modifier_counters[N_MODIFIERS] = {0};
+
+
+#define TARGET 0x20 // target Slave0 address
+#define IODIRA 0x00
+#define IODIRB 0x01
+#define GPIOA 0x12
+#define GPIOB 0x13
+#define GPPUA 0x0C
+#define GPPUB 0x0D
+
+int last_err = 0;
+
+void i2c_init(){
+    // Setup for Master mode, pins 29/30, external pullups, 400kHz, 200ms default timeout
+    Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, 100000);
+    Wire1.setDefaultTimeout(200000); // 200ms
+}
+
+void mcp23018_write_reg(const uint8_t target, const uint8_t addr, const uint8_t d_in){
+    Wire1.beginTransmission(target);   // Slave address
+    Wire1.write(addr);
+    Wire1.write(d_in);
+    Wire1.endTransmission();
+}
+
+uint8_t mcp23018_read_reg(const uint8_t target, const uint8_t addr){
+    Wire1.beginTransmission(target);
+    Wire1.write(addr);
+    Wire1.endTransmission();
+    Wire1.requestFrom(target, (size_t)1);
+    uint8_t dout = 0x00;
+
+    last_err = Wire1.getError();
+    //Check if error occured
+    if(last_err){
+        return 0;
+    }
+    else
+    {
+        while (Wire1.available())
+            dout = Wire1.readByte();
+    }
+
+    return dout;
+}
+
+int mcp23018_read_status(){
+  return last_err;
+}
+
+void mcp23018_init(){
+  mcp23018_write_reg(TARGET, IODIRB, 0xFF);
+  mcp23018_write_reg(TARGET, IODIRA, 0x00);
+  mcp23018_write_reg(TARGET, GPPUB, 0xFF);
+  mcp23018_write_reg(TARGET, GPPUA, 0x00);
+}
 
 /*
   dvorak
@@ -144,10 +202,6 @@ void init_main() {
     pinMode(COL_PINS[c], INPUT_PULLDOWN);
   }
 
-  // Setup for Master mode, pins 18/19, external pullups, 400kHz, 200ms default timeout
-  Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_INT, 400000);
-  Wire.setDefaultTimeout(200000); // 200ms
-
   free_usb_keys.push(5);
   free_usb_keys.push(4);
   free_usb_keys.push(3);
@@ -155,33 +209,9 @@ void init_main() {
   free_usb_keys.push(1);
   free_usb_keys.push(0);
 
-  // configure the io expander
-  delay(10);
-  Wire.beginTransmission(target_write);
-  //gpiob set as outputs
-  Wire.write(IODIRB);
-  Wire.write(0x00);
-  Wire.endTransmission();
-  delay(10);
-
-  // Check if error occured
-        if(Wire.getError())
-            Serial.print("i2c conf1 FAIL\n");
-        else
-            Serial.print("i2c conf1 OK\n");
+  i2c_init();
+  mcp23018_init();
   
-  //gpioa set to use internal pull-ups
-  Wire.beginTransmission(target_read);
-  Wire.write(GPPUA);
-  Wire.write(0xFF);
-  Wire.endTransmission();
-
-  // Check if error occured
-        if(Wire.getError())
-            Serial.print("i2c conf2 FAIL\n");
-        else
-            Serial.print("i2c conf2 OK\n");
-
   reset_key_statuses();
   set_int_array(modifier_counters, N_MODIFIERS, 0);
   modifier=0;
@@ -203,21 +233,35 @@ void write_matrix_local(int row){
 
 }
 
-void set_row_remote(int row){
-  uint8_t output_row = 0xFE;
-  output_row <<= row;
+void write_matrix_remote(int output){
+  uint8_t output_mask = 0xFE;
+  output_mask <<= output;
   
-  Wire.beginTransmission(target_write);
-  Wire.write(GPIOA);
-  Wire.write(output_row);
-  Wire.endTransmission();  
+  mcp23018_write_reg(TARGET, GPIOA, output_mask);
 }
 
-void get_row_remote(int *row_buff){
-  Wire.beginTransmission(target_read);
-  Wire.write(GPIOB);
-  //Wire.requestFrom(target_read, row_buff);
-  Wire.endTransmission();
+void read_matrix_remote(int *out_buf, size_t buf_len){
+  uint8_t res = mcp23018_read_reg(TARGET, GPIOB);
+  int err = mcp23018_read_status();
+
+  if (err){
+    #ifdef DEBUG
+      Serial.print("Error receiving: ");
+      Serial.println(err);
+    #endif
+    return;
+  }
+      
+  #ifdef DEBUG
+    Serial.printf("received from %#02x\n", TARGET);
+    Serial.print(res, BIN);
+    Serial.println(" OK");
+  #endif
+  
+  int i;
+  for (;i<buf_len; ++i){
+    out_buf[i] = bitRead(i, res);
+  }
 }
 
 void read_matrix_local(int *row_buff){
@@ -343,9 +387,9 @@ void run_main() {
   
   int row = 0;
   for (;row<N_ROWS;++row){
-    //set_row_remote(row);
+    write_matrix_remote(row);
     write_matrix_local(row);
-    //get_row_remote(row_buff);
+    read_matrix_remote(row_buff + N_ROWS/2, N_ROWS/2);
     read_matrix_local(row_buff);
 
     //print_int_array(row_buff, N_COLS);

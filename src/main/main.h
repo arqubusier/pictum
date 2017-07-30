@@ -9,7 +9,7 @@ typedef struct key_status_t{
   //The index in the reported usb_keys if it has been been previously assigned
   //UNASSIGNED_USB_KEY otherwise.
   int usb_key;
-};
+} key_status_t;
 
 
 class int_stack{
