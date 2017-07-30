@@ -21,10 +21,14 @@ const uint8_t GPIOB = 0x13;
 
 const int HID_MAX = 256;
 
+
 const int N_ROWS = 4;
 const int N_COLS = 12;
-const int N_ROW_PINS = 4;
-const int N_COL_PINS = 6;
+const int N_OUT_PINS = 4;
+const int N_IN_PINS = 6;
+const int REMOTE_COL_OFFS = N_COLS/2;
+const int N_OUT_REMOTES = 6;
+const int N_IN_REMOTES = 4;
 const int COL_PINS[] = {0, 1, 2, 3, 4, 5};
 const int ROW_PINS[] = {6, 7, 8, 9};
 const int LED_PIN = 13;
@@ -158,8 +162,21 @@ key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
 int key_status[N_COLS*N_ROWS];
 unsigned int modifier;
 
-unsigned int key_address(int col, int row, int layer){
-  return layer*N_COLS*N_ROWS + row*N_COLS + col;
+//out corresponds to rows 0-4
+//in corresponds to columns 0-5
+unsigned int local_key_address(int out, int in){
+  return N_COLS*out+in;
+}
+
+
+//out corresponds to columns 5-11
+//in corresponds to rows 0-4
+unsigned int remote_key_address(int out, int in){
+  return N_COLS*out + REMOTE_COL_OFFS + in;
+}
+
+unsigned int key_address(int offs, int layer){
+  return layer*N_COLS*N_ROWS + offs;
 }
 
 void set_int_array(int *arr, size_t n_elems, int val){
@@ -192,13 +209,13 @@ void init_main() {
   Serial.begin(38400);
   //pins 0, 1, 2, 3, 4, 5 correspond to columns for the half with the mcu.
   int r=0;
-  for (;r<N_ROW_PINS;++r){
+  for (;r<N_OUT_PINS;++r){
     pinMode(ROW_PINS[r], OUTPUT);
     digitalWrite(ROW_PINS[r], LOW);
   }
 
   int c = 0;
-  for (;c<N_COL_PINS;++c){
+  for (;c<N_IN_PINS;++c){
     pinMode(COL_PINS[c], INPUT_PULLDOWN);
   }
 
@@ -222,7 +239,7 @@ void init_main() {
 void write_matrix_local(int row){
     int i=0;
     int val = HIGH;
-    for (;i<N_ROW_PINS;++i)
+    for (;i<N_OUT_PINS;++i)
     {
       if (i == row)
         val = HIGH;
@@ -234,9 +251,9 @@ void write_matrix_local(int row){
 }
 
 void write_matrix_remote(int output){
-  uint8_t output_mask = 0xFE;
-  output_mask <<= output;
-  
+  uint8_t output_mask = 0xFF;
+  bitClear(output_mask, output);
+
   mcp23018_write_reg(TARGET, GPIOA, output_mask);
 }
 
@@ -264,12 +281,12 @@ void read_matrix_remote(int *out_buf, size_t buf_len){
   }
 }
 
-void read_matrix_local(int *row_buff){
+void read_matrix_local(int *out_buff){
   int col=0;
   int col_pin=0;
-  for (; col<N_COL_PINS; ++col){
+  for (; col<N_IN_PINS; ++col){
     col_pin = COL_PINS[col];
-    row_buff[col] = digitalRead(col_pin);
+    out_buff[col] = digitalRead(col_pin);
   }
 }
 
@@ -289,16 +306,16 @@ void send_usb(){
   Keyboard.send_now();
 }
 
-int get_key_status(int col, int row){
-  return key_status[key_address(col, row, 0)];
+int get_key_status(int key_idx){
+  return key_status[key_address(key_idx, 0)];
 }
 
-void set_status(int col, int row, int usb_key){
-  key_status[key_address(col, row, 0)] = usb_key;
+void set_status(int key_idx, int usb_key){
+  key_status[key_address(key_idx, 0)] = usb_key;
 }
 
-key_data_t get_key_data(int col, int row){
-  return key_map[key_address(col,row,fn_layer)];
+key_data_t get_key_data(int key_idx){
+  return key_map[key_address(key_idx,fn_layer)];
 }
 
 bool should_update(int key_state, int old_status){
@@ -380,31 +397,14 @@ void handle_special_keys(int key_state, key_data_t key_data){
     fn_layer = DEFAULT_FN_LAYER;
 }
 
-void run_main() {
-  
-  int row_buff[N_COLS] = {0};
-  set_int_array(row_buff, N_COLS, LOW);
-  
-  int row = 0;
-  for (;row<N_ROWS;++row){
-    write_matrix_remote(row);
-    write_matrix_local(row);
-    read_matrix_remote(row_buff + N_ROWS/2, N_ROWS/2);
-    read_matrix_local(row_buff);
-
-    //print_int_array(row_buff, N_COLS);
-    
-    int col = 0;
-    for (;col<N_COLS;++col){
-      int key_state = row_buff[col]; //HIGH, LOW
-      int key_nr = get_key_status(col, row); //-1, 0, 1, 2, 3, 4, 5
+void handle_key_press(int key_idx, int key_state){
+      int key_nr = get_key_status(key_idx); //-1, 0, 1, 2, 3, 4, 5
       int next_key_nr = UNASSIGNED_UP;
-      key_data_t key_data = get_key_data(col, row);
+      key_data_t key_data = get_key_data(key_idx);
       
       if (should_update(key_state, key_nr)){
-        Serial.print(col);
-        Serial.print("  ");
-        Serial.print(row);
+        Serial.print("KEY_IDX ");
+        Serial.print(key_idx);
         Serial.println(" B");
         int usb_key_value=0;
         bool should_update_usb = false;
@@ -452,8 +452,29 @@ void run_main() {
 
         Serial.print("next status");
         Serial.println(next_key_nr);
-        set_status(col, row, next_key_nr);
+        set_status(key_idx, next_key_nr);
       }
+}
+
+void run_main() {
+
+  //TODO CALCULATE PROPER MAX AT COMPILE TIME
+  const size_t OUT_LEN = N_OUT_PINS + N_OUT_REMOTES;
+  
+  int out_buff[OUT_LEN] = {0};
+  set_int_array(out_buff, OUT_LEN, LOW);
+  
+  int out = 0;
+  for (out=0;out<N_OUT_PINS;++out){
+    write_matrix_local(out);
+    read_matrix_local(out_buff);
+
+    //print_int_array(out_buff, N_COLS);  
+    int in = 0;
+    for (;in<N_IN_PINS;++in){
+      int key_idx = local_key_address(out, in);
+      int key_val = out_buff[in];
+      handle_key_press(key_idx, key_val);
     }
-  }  
+  }
 }
