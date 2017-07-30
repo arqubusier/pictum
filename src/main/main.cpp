@@ -3,7 +3,7 @@
 #include <i2c_t3.h>
 #include "key_codes.h"
 
-#define DEBUG
+//#define DEBUG
 
 const int UNASSIGNED_DOWN = -2;
 const int UNASSIGNED_UP = -1;
@@ -172,7 +172,7 @@ unsigned int local_key_address(int out, int in){
 //out corresponds to columns 5-11
 //in corresponds to rows 0-4
 unsigned int remote_key_address(int out, int in){
-  return N_COLS*out + REMOTE_COL_OFFS + in;
+  return N_COLS*in + REMOTE_COL_OFFS + out;
 }
 
 unsigned int key_address(int offs, int layer){
@@ -257,7 +257,7 @@ void write_matrix_remote(int output){
   mcp23018_write_reg(TARGET, GPIOA, output_mask);
 }
 
-void read_matrix_remote(int *out_buf, size_t buf_len){
+void read_matrix_remote(int *out_buf){
   uint8_t res = mcp23018_read_reg(TARGET, GPIOB);
   int err = mcp23018_read_status();
 
@@ -276,8 +276,10 @@ void read_matrix_remote(int *out_buf, size_t buf_len){
   #endif
   
   int i;
-  for (;i<buf_len; ++i){
-    out_buf[i] = bitRead(i, res);
+  for (;i<N_IN_REMOTES; ++i){
+    //Because the ioexpander has open drain outputs,
+    //Low means the key is pressed. Thus the bits need to be flipped
+    out_buf[i] = (0 == bitRead(res,i));
   }
 }
 
@@ -465,14 +467,28 @@ void run_main() {
   set_int_array(out_buff, OUT_LEN, LOW);
   
   int out = 0;
+
+//  //Half with the teensy
   for (out=0;out<N_OUT_PINS;++out){
     write_matrix_local(out);
     read_matrix_local(out_buff);
 
-    //print_int_array(out_buff, N_COLS);  
     int in = 0;
     for (;in<N_IN_PINS;++in){
       int key_idx = local_key_address(out, in);
+      int key_val = out_buff[in];
+      handle_key_press(key_idx, key_val);
+    }
+  }
+
+  //Half with the ioexpander
+  for (out=0;out<N_OUT_REMOTES;++out){
+    write_matrix_remote(out);
+    read_matrix_remote(out_buff);
+  
+    int in = 0;
+    for (;in<N_IN_REMOTES;++in){
+      int key_idx = remote_key_address(out, in);
       int key_val = out_buff[in];
       handle_key_press(key_idx, key_val);
     }
