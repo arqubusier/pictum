@@ -2,7 +2,46 @@
 #include "main.h"
 #include <i2c_t3.h>
 #include "key_codes.h"
-#include <list>
+int x;
+int arr[2];
+const int l=48;
+
+typedef struct stack_t{
+  int head;
+  int arr[MAX_LEN];
+} stack_t;
+
+void stack_init(stack_t *s){
+  s->head = -1;
+}
+
+
+bool stack_is_empty(stack_t *s){
+  return s->head == -1;
+}
+  
+void stack_push(stack_t *s, int val){
+  if (s->head < MAX_LEN){
+    ++(s->head);
+    s->arr[s->head] = val;
+  }
+}
+
+int stack_pop(stack_t *s){
+  if (stack_is_empty(s))
+    return -1;
+  
+  int val = s->arr[s->head];
+  --(s->head);
+  return val;
+}
+
+int stack_size(stack_t *s){
+  return s->head;
+}
+
+
+stack_t free_keys;
 
 //#define DEBUG
 
@@ -44,7 +83,7 @@ int fn_r = 0;
 int fn_layer = 0;
 int n_pressed_keys = 0;
 
-int_stack free_usb_keys;
+int active_layers[N_FN_LAYERS] = {0};
 
 //Counters for all modifiers showing how many keys affect them 
 int modifier_counters[N_MODIFIERS] = {0};
@@ -122,11 +161,11 @@ void mcp23018_init(){
 key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
 {
   //level 0
-  {MODIFIER_NONE, KEY_SW_QUOTE}, {MODIFIER_NONE, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_PUNCT}, {MODIFIER_NONE, KEY_SW_P}, {MODIFIER_NONE, KEY_SW_Y}, {MODIFIER_NONE, KEY_LAYER1},
+  {MODIFIER_NONE, KEY_SW_QUOTE}, {MODIFIER_NONE, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_PUNCT}, {MODIFIER_NONE, KEY_SW_P}, {MODIFIER_NONE, KEY_SW_Y}, {MODIFIER_LCTRL, 0},
     {MODIFIER_NONE, KEY_SW_F}, {MODIFIER_NONE, KEY_SW_G}, {MODIFIER_NONE, KEY_SW_C}, {MODIFIER_NONE, KEY_SW_R}, {MODIFIER_NONE, KEY_SW_L}, {MODIFIER_NONE, KEY_LAYER3},
   {MODIFIER_NONE, KEY_SW_A}, {MODIFIER_NONE, KEY_SW_O}, {MODIFIER_NONE, KEY_SW_E}, {MODIFIER_NONE, KEY_SW_U}, {MODIFIER_NONE, KEY_SW_I}, {MODIFIER_NONE, KEY_SW_SPACE},
     {MODIFIER_NONE, KEY_SW_D}, {MODIFIER_NONE, KEY_SW_H}, {MODIFIER_NONE, KEY_SW_T}, {MODIFIER_NONE, KEY_SW_N}, {MODIFIER_NONE, KEY_SW_S}, {MODIFIER_LGUI, 0},
-  {MODIFIER_LSHIFT, KEY_COMMA}, {MODIFIER_NONE, KEY_SW_Q}, {MODIFIER_NONE, KEY_SW_J}, {MODIFIER_NONE, KEY_SW_K}, {MODIFIER_NONE, KEY_SW_X}, {MODIFIER_LCTRL, 0},
+  {MODIFIER_LSHIFT, KEY_COMMA}, {MODIFIER_NONE, KEY_SW_Q}, {MODIFIER_NONE, KEY_SW_J}, {MODIFIER_NONE, KEY_SW_K}, {MODIFIER_NONE, KEY_SW_X}, {MODIFIER_NONE, KEY_LAYER1},
     {MODIFIER_NONE, KEY_SW_B}, {MODIFIER_NONE, KEY_SW_M}, {MODIFIER_NONE, KEY_SW_W}, {MODIFIER_NONE, KEY_SW_V}, {MODIFIER_NONE, KEY_SW_Z}, {MODIFIER_NONE, KEY_LAYER2},
   {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_LEFT}, {MODIFIER_NONE, KEY_SW_UP}, {MODIFIER_NONE, KEY_SW_RIGHT}, {0, 0}, {MODIFIER_NONE, KEY_SW_DOWN},
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {0, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN},
@@ -220,18 +259,22 @@ void init_main() {
     pinMode(COL_PINS[c], INPUT_PULLDOWN);
   }
 
-  free_usb_keys.push(5);
-  free_usb_keys.push(4);
-  free_usb_keys.push(3);
-  free_usb_keys.push(2);
-  free_usb_keys.push(1);
-  free_usb_keys.push(0);
-
+  stack_init(&free_keys);
+  stack_push(&free_keys, 5);
+  stack_push(&free_keys, 4);
+  stack_push(&free_keys, 3);
+  stack_push(&free_keys, 2);
+  stack_push(&free_keys, 1);
+  stack_push(&free_keys, 0);
+  
+  Serial.println(stack_size(&free_keys));
+  
   i2c_init();
   mcp23018_init();
   
   reset_key_statuses();
   set_int_array(modifier_counters, N_MODIFIERS, 0);
+  set_int_array(active_layers, N_MODIFIERS, 0);
   modifier=0;
   Serial.println("Finish Init");
 }
@@ -295,14 +338,16 @@ void read_matrix_local(int *out_buff){
 
 
 int get_free_key_nr(){
-  if (free_usb_keys.empty())
+  Serial.print("  free_usb_key");
+  Serial.println(stack_size(&free_keys));
+  if (stack_is_empty(&free_keys))
     return -1;
    
-  return free_usb_keys.pop();
+  return stack_pop(&free_keys);
 }
 
 void return_key_nr(int key_nr){
-  free_usb_keys.push(key_nr);
+  stack_push(&free_keys, key_nr);
 }
 
 void send_usb(){
@@ -377,25 +422,51 @@ unsigned int update_modifiers(int key_state, int modifier){
   return res;
 }
 
+/*
+ * The currently activated function Layer with the highest number determines the layer
+ * 
+ */
 void handle_special_keys(int key_state, key_data_t key_data){
   int key_value = key_data.hid_code;
   int layer = 0;
-
+  
   if (key_value >= KEY_LAYER1 && key_value < KEY_LAYER1 + N_FN_LAYERS){
-    layer = key_value - KEY_LAYER1;
+    layer = key_value - KEY_LAYER1 + 1;
   }
-
-  if (key_state == HIGH)
-    fn_layer = layer;
   else
-    fn_layer = DEFAULT_FN_LAYER;
+    return;
+
+  if (key_state == HIGH){
+    active_layers[layer] = 1;
+    
+    if (layer>fn_layer){
+      fn_layer = 1;
+    }
+  }
+  else if (key_state == LOW){
+    if (!active_layers[layer])
+      return;
+      
+    active_layers[layer] = 0;
+
+    int i = N_FN_LAYERS - 1;
+    for (;i>=0; --i){
+      if (active_layers[i]){
+        fn_layer = i;
+        break;
+      }
+      fn_layer = DEFAULT_FN_LAYER;
+    }
   //TODO RESET MODIFIERS
+  }
 }
 
 void handle_key_press(int key_idx, int key_state){
       int key_nr = get_key_status(key_idx); //-1, 0, 1, 2, 3, 4, 5
       int next_key_nr = UNASSIGNED_UP;
       key_data_t key_data = get_key_data(key_idx);
+
+      handle_special_keys(key_state, key_data);
       
       if (should_update(key_state, key_nr)){
         Serial.print("KEY_IDX ");
@@ -439,7 +510,6 @@ void handle_key_press(int key_idx, int key_state){
           Keyboard.set_modifier(new_modifier);
         }
 
-        handle_special_keys(key_state, key_data);
         
         if (should_update_usb){
           send_usb(); 
@@ -451,8 +521,7 @@ void handle_key_press(int key_idx, int key_state){
       }
 }
 
-void run_main() {
-
+void run_main(){
   //TODO CALCULATE PROPER MAX AT COMPILE TIME
   const size_t OUT_LEN = N_OUT_PINS + N_OUT_REMOTES;
   
