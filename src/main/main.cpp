@@ -5,6 +5,7 @@
 int x;
 int arr[2];
 const int l=48;
+uint8_t g_modifiers = 0x00;
 
 typedef struct stack_t{
   int head;
@@ -162,39 +163,39 @@ key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
 {
   //level 0
   {MODIFIER_NONE, KEY_SW_QUOTE}, {MODIFIER_NONE, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_PUNCT}, {MODIFIER_NONE, KEY_SW_P}, {MODIFIER_NONE, KEY_SW_Y}, {MODIFIER_LCTRL, 0},
-    {MODIFIER_NONE, KEY_SW_F}, {MODIFIER_NONE, KEY_SW_G}, {MODIFIER_NONE, KEY_SW_C}, {MODIFIER_NONE, KEY_SW_R}, {MODIFIER_NONE, KEY_SW_L}, {MODIFIER_NONE, KEY_LAYER3},
+    {MODIFIER_NONE, KEY_SW_F}, {MODIFIER_NONE, KEY_SW_G}, {MODIFIER_NONE, KEY_SW_C}, {MODIFIER_NONE, KEY_SW_R}, {MODIFIER_NONE, KEY_SW_L}, {MODIFIER_NONE, KEY_LAYER3}, //leftmost thumb
   {MODIFIER_NONE, KEY_SW_A}, {MODIFIER_NONE, KEY_SW_O}, {MODIFIER_NONE, KEY_SW_E}, {MODIFIER_NONE, KEY_SW_U}, {MODIFIER_NONE, KEY_SW_I}, {MODIFIER_NONE, KEY_SW_SPACE},
     {MODIFIER_NONE, KEY_SW_D}, {MODIFIER_NONE, KEY_SW_H}, {MODIFIER_NONE, KEY_SW_T}, {MODIFIER_NONE, KEY_SW_N}, {MODIFIER_NONE, KEY_SW_S}, {MODIFIER_LGUI, 0},
-  {MODIFIER_LSHIFT, KEY_COMMA}, {MODIFIER_NONE, KEY_SW_Q}, {MODIFIER_NONE, KEY_SW_J}, {MODIFIER_NONE, KEY_SW_K}, {MODIFIER_NONE, KEY_SW_X}, {MODIFIER_NONE, KEY_LAYER1},
-    {MODIFIER_NONE, KEY_SW_B}, {MODIFIER_NONE, KEY_SW_M}, {MODIFIER_NONE, KEY_SW_W}, {MODIFIER_NONE, KEY_SW_V}, {MODIFIER_NONE, KEY_SW_Z}, {MODIFIER_NONE, KEY_LAYER2},
+  {MODIFIER_LSHIFT, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_Q}, {MODIFIER_NONE, KEY_SW_J}, {MODIFIER_NONE, KEY_SW_K}, {MODIFIER_NONE, KEY_SW_X}, {MODIFIER_NONE, KEY_LAYER1},
+    {MODIFIER_NONE, KEY_SW_B}, {MODIFIER_NONE, KEY_SW_M}, {MODIFIER_NONE, KEY_SW_W}, {MODIFIER_NONE, KEY_SW_V}, {MODIFIER_NONE, KEY_SW_Z}, {MODIFIER_NONE, KEY_LAYER2}, //rightmost thumb
   {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_LEFT}, {MODIFIER_NONE, KEY_SW_UP}, {MODIFIER_NONE, KEY_SW_RIGHT}, {0, 0}, {MODIFIER_NONE, KEY_SW_DOWN},
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {0, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN},
   //level 1
   {MODIFIER_ALTGR, KEY_SW_DDOT}, {MODIFIER_NONE, KEY_SW_7}, {MODIFIER_NONE, KEY_SW_8},{MODIFIER_NONE, KEY_SW_9}, {MODIFIER_LSHIFT, KEY_SW_7}, {MODIFIER_LCTRL, 0}, 
-    {MODIFIER_NONE, KEY_SW_ESC}, {MODIFIER_ALTGR, KEY_SW_7} ,{MODIFIER_ALTGR, KEY_SW_8}, {MODIFIER_ALTGR, KEY_SW_4}, {MODIFIER_NONE, KEY_SW_AO}, {0, KEY_LAYER2},
+    {MODIFIER_NONE, KEY_SW_ESC}, {MODIFIER_ALTGR, KEY_SW_7} ,{MODIFIER_ALTGR, KEY_SW_0}, {MODIFIER_ALTGR, KEY_SW_4}, {MODIFIER_NONE, KEY_SW_AO}, {0, 0},
   {MODIFIER_NONE, KEY_SW_TAB}, {MODIFIER_NONE, KEY_SW_4}, {MODIFIER_NONE, KEY_SW_5}, {MODIFIER_NONE, KEY_SW_6}, {MODIFIER_NONE, KEY_SW_ENTER}, {MODIFIER_NONE, KEY_SW_SPACE}, 
     {MODIFIER_NONE, KEY_SW_DELETE}, {MODIFIER_LSHIFT, KEY_SW_8}, {MODIFIER_LSHIFT, KEY_SW_9}, {MODIFIER_NONE, KEY_SW_AE}, {MODIFIER_NONE, KEY_SW_OE}, {MODIFIER_LGUI, 0},
-  {MODIFIER_LSHIFT, KEY_SW_5}, {MODIFIER_NONE, KEY_SW_1}, {MODIFIER_NONE, KEY_SW_2}, {MODIFIER_NONE, KEY_SW_3}, {MODIFIER_NONE, KEY_SW_0}, {0, KEY_LAYER1},
-    {MODIFIER_ALTGR, KEY_SW_PLUS}, {MODIFIER_LSHIFT, KEY_SW_8}, {MODIFIER_LSHIFT, KEY_SW_9}, {MODIFIER_LSHIFT, KEY_SW_1}, {MODIFIER_LSHIFT, 0},
-  {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_LEFT}, {MODIFIER_NONE, KEY_SW_UP}, {MODIFIER_NONE, KEY_SW_BACKSPACE}, {0, 0}, {MODIFIER_NONE, KEY_SW_DOWN}, 
+  {MODIFIER_NONE, KEY_SW_BACKSPACE}, {MODIFIER_NONE, KEY_SW_1}, {MODIFIER_NONE, KEY_SW_2}, {MODIFIER_NONE, KEY_SW_3}, {MODIFIER_NONE, KEY_SW_0}, {0, KEY_LAYER1},
+    {MODIFIER_ALTGR, KEY_SW_PLUS}, {MODIFIER_ALTGR, KEY_SW_8}, {MODIFIER_ALTGR, KEY_SW_9}, {MODIFIER_LSHIFT, KEY_SW_1}, {MODIFIER_ALTGR, KEY_SW_LESST}, {MODIFIER_LSHIFT, 0},
+  {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_LEFT}, {MODIFIER_NONE, KEY_SW_UP}, {MODIFIER_LSHIFT, KEY_SW_5}, {0, 0}, {MODIFIER_NONE, KEY_SW_DOWN}, 
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {0, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN},
 
   //level 2
   {0, KEY_SW_F2}, {0, KEY_SW_F3}, {0, KEY_SW_F4}, {0, KEY_SW_F5}, {0, KEY_SW_F6}, {MODIFIER_LCTRL, 0}, 
-    {0, KEY_SW_F7}, {0, KEY_SW_F8}, {0, KEY_SW_F9}, {0, KEY_SW_F10}, {0, KEY_SW_F11}, {0, KEY_SW_SPACE},
-  {0, KEY_SW_F1}, {0, KEY_SW_PLUS}, {0, KEY_SW_HYPH}, {MODIFIER_LSHIFT, KEY_SW_0}, {MODIFIER_LSHIFT, KEY_SW_QUOTE}, {0, 0}, 
-    {0, KEY_SW_F12}, {MODIFIER_ALTGR, KEY_SW_2}, {MODIFIER_LSHIFT, KEY_SW_PLUS}, {0, KEY_SW_ACCENT}, {MODIFIER_LSHIFT, KEY_SW_DDOT}, {MODIFIER_LGUI, 0}, {0, KEY_LAYER1},
+    {0, KEY_SW_F7}, {0, KEY_SW_F8}, {0, KEY_SW_F9}, {0, KEY_SW_F10}, {0, KEY_SW_F11}, {0, 0},
+   {0, KEY_SW_PLUS}, {0, KEY_SW_HYPH}, {MODIFIER_LSHIFT, KEY_SW_0}, {MODIFIER_LSHIFT, KEY_SW_QUOTE},{0, KEY_SW_F1}, {0, 0}, 
+    {0, KEY_SW_F12}, {MODIFIER_ALTGR, KEY_SW_2}, {MODIFIER_LSHIFT, KEY_SW_PLUS}, {0, KEY_SW_ACCENT}, {MODIFIER_LSHIFT, KEY_SW_DDOT}, {MODIFIER_LGUI, 0},
   {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
-    {0, 0}, {MODIFIER_LALT, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {0, 0}, {MODIFIER_LALT, 0}, {0, 0}, {0, 0}, {0, 0}, {0, KEY_LAYER2},
   {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_LEFT}, {MODIFIER_NONE, KEY_SW_UP}, {MODIFIER_NONE, KEY_SW_BACKSPACE}, {0, 0}, {MODIFIER_NONE, KEY_SW_DOWN}, 
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {0, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN},
     //level 3
-  {MODIFIER_NONE, KEY_SW_QUOTE}, {MODIFIER_NONE, KEY_SW_COMMA}, {MODIFIER_NONE, KEY_SW_PUNCT}, {MODIFIER_LSHIFT, KEY_SW_P}, {MODIFIER_LSHIFT, KEY_SW_Y}, {MODIFIER_LSHIFT, KEY_SW_ENTER},
-    {MODIFIER_LSHIFT, KEY_SW_F}, {MODIFIER_LSHIFT, KEY_SW_G}, {MODIFIER_LSHIFT, KEY_SW_C}, {MODIFIER_LSHIFT, KEY_SW_R}, {MODIFIER_LSHIFT, KEY_SW_L}, {MODIFIER_LSHIFT, KEY_SW_Q},
+  {MODIFIER_LSHIFT, KEY_SW_2}, {MODIFIER_NONE, KEY_SW_LESST}, {MODIFIER_LSHIFT, KEY_SW_LESST}, {MODIFIER_LSHIFT, KEY_SW_P}, {MODIFIER_LSHIFT, KEY_SW_Y}, {MODIFIER_LSHIFT, KEY_SW_ENTER},
+    {MODIFIER_LSHIFT, KEY_SW_F}, {MODIFIER_LSHIFT, KEY_SW_G}, {MODIFIER_LSHIFT, KEY_SW_C}, {MODIFIER_LSHIFT, KEY_SW_R}, {MODIFIER_LSHIFT, KEY_SW_L}, {0, KEY_LAYER3},
   {MODIFIER_LSHIFT, KEY_SW_A}, {MODIFIER_LSHIFT, KEY_SW_O}, {MODIFIER_LSHIFT, KEY_SW_E}, {MODIFIER_LSHIFT, KEY_SW_U}, {MODIFIER_LSHIFT, KEY_SW_I}, {MODIFIER_NONE, KEY_SW_SPACE},
-    {MODIFIER_LSHIFT, KEY_SW_D}, {MODIFIER_LSHIFT, KEY_SW_H}, {MODIFIER_LSHIFT, KEY_SW_T}, {MODIFIER_LSHIFT, KEY_SW_N}, {MODIFIER_LSHIFT, KEY_SW_S}, {MODIFIER_NONE, KEY_SW_HYPH},
-  {MODIFIER_LSHIFT, KEY_COMMA}, {MODIFIER_NONE, KEY_SW_Q}, {MODIFIER_NONE, KEY_SW_J}, {MODIFIER_NONE, KEY_SW_K}, {MODIFIER_NONE, KEY_SW_X}, {MODIFIER_NONE, KEY_SW_BACKSPACE},
-    {MODIFIER_LSHIFT, KEY_SW_B}, {MODIFIER_LSHIFT, KEY_SW_M}, {MODIFIER_LSHIFT, KEY_SW_W}, {MODIFIER_LSHIFT, KEY_SW_V}, {MODIFIER_LSHIFT, KEY_SW_Z}, {MODIFIER_NONE, KEY_SW_ENTER},
+    {MODIFIER_LSHIFT, KEY_SW_D}, {MODIFIER_LSHIFT, KEY_SW_H}, {MODIFIER_LSHIFT, KEY_SW_T}, {MODIFIER_LSHIFT, KEY_SW_N}, {MODIFIER_LSHIFT, KEY_SW_S}, {0, 0},
+  {MODIFIER_LSHIFT, KEY_SW_PUNCT}, {MODIFIER_LSHIFT, KEY_SW_Q}, {MODIFIER_LSHIFT, KEY_SW_J}, {MODIFIER_LSHIFT, KEY_SW_K}, {MODIFIER_LSHIFT, KEY_SW_X}, {MODIFIER_NONE, KEY_SW_BACKSPACE},
+    {MODIFIER_LSHIFT, KEY_SW_B}, {MODIFIER_LSHIFT, KEY_SW_M}, {MODIFIER_LSHIFT, KEY_SW_W}, {MODIFIER_LSHIFT, KEY_SW_V}, {MODIFIER_LSHIFT, KEY_SW_Z}, {0, 0},
   {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_LEFT}, {MODIFIER_NONE, KEY_SW_UP}, {MODIFIER_NONE, KEY_SW_RIGHT}, {0, 0}, {MODIFIER_NONE, KEY_SW_DOWN}, 
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {0, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN}
 };
@@ -394,32 +395,44 @@ bool set_usb_key(int usb_key, int value){
   return false;
 }
 
-unsigned int update_modifiers(int key_state, int modifier){
-  unsigned int res = 0;
-   
+// Updates modifers
+// More than one key per modifier is supported
+// returns 0 if no change, and 1 if there is an update
+int update_modifiers(int key_state, int modifier){
+  uint8_t old_modifiers = g_modifiers;
+
+  Serial.print("MODIFIERS1 ");
+  Serial.print(old_modifiers);
+  Serial.print(" ");
+  Serial.println(g_modifiers);
+  Serial.print("STATE ");
+  Serial.println(key_state);
+  
   if (modifier != MODIFIER_NONE){
     int counter = modifier_counters[modifier];
     if (key_state == HIGH){
       
       if (counter == 0){
-        bitSet(res, modifier);
+        bitSet(g_modifiers, modifier);
       }
         
       modifier_counters[modifier] = counter + 1;
     }
     else{
       if (counter == 1){
-        bitClear(res,modifier);
+        bitClear(g_modifiers,modifier);
       }
       modifier_counters[modifier] = counter - 1;
     }
   }
 
-  Serial.println("MODIFIERS after");
-
-  print_int_array(modifier_counters, N_MODIFIERS);
-  Serial.println(res, BIN);
-  return res;
+  Serial.print("MODIFIERS2 ");
+  Serial.print(old_modifiers);
+  Serial.print(" ");
+  Serial.println(g_modifiers);
+  Serial.print("STATE ");
+  Serial.println(key_state);
+  return g_modifiers != old_modifiers;
 }
 
 /*
@@ -428,26 +441,33 @@ unsigned int update_modifiers(int key_state, int modifier){
  */
 void handle_special_keys(int key_state, key_data_t key_data){
   int key_value = key_data.hid_code;
-  int layer = 0;
-  
-  if (key_value >= KEY_LAYER1 && key_value < KEY_LAYER1 + N_FN_LAYERS){
-    layer = key_value - KEY_LAYER1 + 1;
-  }
-  else
-    return;
 
+  int layer = key_value - KEY_LAYER1 + 1;
+  if ( !(layer >= 0 && layer < N_FN_LAYERS) ){
+    return;
+  }
+//
+  Serial.print("SSSSTATE ");
+  Serial.println(key_state);
   if (key_state == HIGH){
     active_layers[layer] = 1;
+    Serial.print("LAYER PRESS ");
+    Serial.println(layer);
+    print_int_array(active_layers, N_FN_LAYERS);
     
     if (layer>fn_layer){
-      fn_layer = 1;
+      Serial.print("Update");
+      fn_layer = layer;
     }
   }
   else if (key_state == LOW){
-    if (!active_layers[layer])
-      return;
+    //if (!active_layers[layer])
+    //  return;
       
     active_layers[layer] = 0;
+    Serial.print("LAYER UNPRESS ");
+    Serial.println(layer);
+    print_int_array(active_layers, N_FN_LAYERS);
 
     int i = N_FN_LAYERS - 1;
     for (;i>=0; --i){
@@ -465,13 +485,14 @@ void handle_key_press(int key_idx, int key_state){
       int key_nr = get_key_status(key_idx); //-1, 0, 1, 2, 3, 4, 5
       int next_key_nr = UNASSIGNED_UP;
       key_data_t key_data = get_key_data(key_idx);
-
-      handle_special_keys(key_state, key_data);
       
       if (should_update(key_state, key_nr)){
+        handle_special_keys(key_state, key_data);
         Serial.print("KEY_IDX ");
         Serial.print(key_idx);
         Serial.println(" B");
+        Serial.print("FN ");
+        Serial.println(fn_layer);
         int usb_key_value=0;
         bool should_update_usb = false;
         
@@ -496,18 +517,11 @@ void handle_key_press(int key_idx, int key_state){
         Serial.print(" usb_key ");
         Serial.print(usb_key_value);
         Serial.println(" 3");
-
-        unsigned int new_modifier = update_modifiers(key_state, key_data.modifier);
         
-        Serial.print("new_modifier ");
-        Serial.print(new_modifier, BIN);
-        Serial.print("modifier");
-        Serial.println(modifier, BIN);
-        if (new_modifier != modifier){
+        if (update_modifiers(key_state, key_data.modifier)){
           Serial.println("Update modifier");
-          should_update_usb = true;
-          modifier=new_modifier;
-          Keyboard.set_modifier(new_modifier);
+          Serial.println(g_modifiers, BIN);
+          Keyboard.set_modifier(g_modifiers);
         }
 
         
