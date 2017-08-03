@@ -2,9 +2,7 @@
 #include "main.h"
 #include <i2c_t3.h>
 #include "key_codes.h"
-int x;
-int arr[2];
-const int l=48;
+
 uint8_t g_modifiers = 0x00;
 
 typedef struct stack_t{
@@ -41,6 +39,14 @@ int stack_size(stack_t *s){
   return s->head;
 }
 
+int stack_peek(stack_t *s){
+  if (stack_is_empty(s)){
+    return -1;
+  }
+
+  return s->arr[0];
+}
+
 
 stack_t free_keys;
 
@@ -59,8 +65,6 @@ const uint8_t GPPUA = 0x0C;
 const uint8_t GPPUB = 0x0D;
 const uint8_t GPIOA = 0x12;
 const uint8_t GPIOB = 0x13;
-
-const int HID_MAX = 256;
 
 
 const int N_ROWS = 4;
@@ -200,7 +204,7 @@ key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {0, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN}
 };
 
-int key_status[N_COLS*N_ROWS];
+key_status_t key_status[N_COLS*N_ROWS];
 unsigned int modifier;
 
 //out corresponds to rows 0-4
@@ -228,7 +232,10 @@ void set_int_array(int *arr, size_t n_elems, int val){
 }
 
 void reset_key_statuses(){
-  set_int_array(key_status, N_COLS*N_ROWS, UNASSIGNED_UP);
+  int i = 0;
+  for (;i<N_COLS*N_ROWS; ++i){
+    key_status[i] = {0, UNASSIGNED_UP};
+  }
 }
 
 void print_int_array(int *arr, size_t n_elems){
@@ -267,8 +274,6 @@ void init_main() {
   stack_push(&free_keys, 2);
   stack_push(&free_keys, 1);
   stack_push(&free_keys, 0);
-  
-  Serial.println(stack_size(&free_keys));
   
   i2c_init();
   mcp23018_init();
@@ -339,12 +344,12 @@ void read_matrix_local(int *out_buff){
 
 
 int get_free_key_nr(){
-  Serial.print("  free_usb_key");
-  Serial.println(stack_size(&free_keys));
-  if (stack_is_empty(&free_keys))
+  if (stack_is_empty(&free_keys)){
     return -1;
-   
-  return stack_pop(&free_keys);
+  }
+
+  int res = stack_pop(&free_keys);
+  return res;
 }
 
 void return_key_nr(int key_nr){
@@ -355,30 +360,26 @@ void send_usb(){
   Keyboard.send_now();
 }
 
-int get_key_status(int key_idx){
+key_status_t get_key_status(int key_idx){
   return key_status[key_address(key_idx, 0)];
 }
 
-void set_status(int key_idx, int usb_key){
-  key_status[key_address(key_idx, 0)] = usb_key;
+void set_status(int key_idx, key_status_t new_status){
+  key_status[key_address(key_idx, 0)] = new_status;
 }
 
 key_data_t get_key_data(int key_idx){
   return key_map[key_address(key_idx,fn_layer)];
 }
 
-bool should_update(int key_state, int old_status){
+bool should_update(int key_state, key_status_t old_status){
+
   if ( 
       //Now: pressed, before: unassigned 
-      (key_state == HIGH && old_status == UNASSIGNED_UP)
+      (key_state == HIGH && !old_status.state)
       //Now: up, before: pressed and assigned
-      ||(key_state == LOW && old_status >= 0 )
+      ||(key_state == LOW && old_status.state)
      ){
-    Serial.print("key_state ");
-    Serial.print(key_state);
-    Serial.print(" old status ");
-    Serial.print(old_status);
-    Serial.println(" 2");
     return true;
   }
 
@@ -398,57 +399,51 @@ bool set_usb_key(int usb_key, int value){
 // Updates modifers
 // More than one key per modifier is supported
 // returns 0 if no change, and 1 if there is an update
-int update_modifiers(int key_state, int modifier){
+key_status_t update_modifiers(int key_state,  key_status_t old_status, key_data_t key_data){
   uint8_t old_modifiers = g_modifiers;
+  modifier = key_data.modifier;
 
-  Serial.print("MODIFIERS1 ");
-  Serial.print(old_modifiers);
-  Serial.print(" ");
-  Serial.println(g_modifiers);
-  Serial.print("STATE ");
-  Serial.println(key_state);
+  int counter = 0;
   
-  if (modifier != MODIFIER_NONE){
-    int counter = modifier_counters[modifier];
-    if (key_state == HIGH){
-      
-      if (counter == 0){
-        bitSet(g_modifiers, modifier);
-      }
-        
-      modifier_counters[modifier] = counter + 1;
+  int modifier = key_data.modifier;
+  if (modifier == MODIFIER_NONE)
+      return old_status;
+  
+  counter = modifier_counters[modifier];      
+  
+  if (key_state == HIGH){
+    if (counter == 0){
+      bitSet(g_modifiers, modifier);
+      old_status.modifier = modifier;
     }
-    else{
-      if (counter == 1){
-        bitClear(g_modifiers,modifier);
-      }
-      modifier_counters[modifier] = counter - 1;
+    
+    modifier_counters[modifier] = counter + 1;
+  }
+  else if (key_state == LOW){
+    if (counter == 1){
+      bitClear(g_modifiers,modifier);
+      old_status.modifier = MODIFIER_NONE;
     }
+    modifier_counters[modifier] = counter - 1;
   }
 
-  Serial.print("MODIFIERS2 ");
-  Serial.print(old_modifiers);
-  Serial.print(" ");
-  Serial.println(g_modifiers);
-  Serial.print("STATE ");
-  Serial.println(key_state);
-  return g_modifiers != old_modifiers;
+  Keyboard.set_modifier(g_modifiers);
+
+  return old_status;
 }
 
 /*
  * The currently activated function Layer with the highest number determines the layer
  * 
  */
-void handle_special_keys(int key_state, key_data_t key_data){
-  int key_value = key_data.hid_code;
+key_status_t update_special_keys(int key_state, key_status_t old_status, key_data_t key_data){
+  int key_value = key_data.value;
 
   int layer = key_value - KEY_LAYER1 + 1;
   if ( !(layer >= 0 && layer < N_FN_LAYERS) ){
-    return;
+    return old_status;
   }
-//
-  Serial.print("SSSSTATE ");
-  Serial.println(key_state);
+  
   if (key_state == HIGH){
     active_layers[layer] = 1;
     Serial.print("LAYER PRESS ");
@@ -479,59 +474,63 @@ void handle_special_keys(int key_state, key_data_t key_data){
     }
   //TODO RESET MODIFIERS
   }
+
+  return old_status;
+}
+
+key_status_t update_usb_keys(int key_state, key_status_t old_status, key_data_t key_data){
+  if (key_data.value < HID_MIN or key_data.value > HID_MAX)
+    return old_status; 
+
+  int next_key_nr = 0;
+  int usb_key_value = 0;
+  
+  if (key_state == HIGH){
+    Serial.println("KEY DOWN");
+    next_key_nr = get_free_key_nr();
+    usb_key_value = key_data.value;
+    ++n_pressed_keys;
+    set_usb_key(next_key_nr, usb_key_value);
+  }
+  else{
+    Serial.println("KEY UP");
+    return_key_nr(old_status.usb_key);     
+    next_key_nr = UNASSIGNED_UP;
+    usb_key_value = HID_RELEASED;
+    --n_pressed_keys;
+
+    set_usb_key(old_status.usb_key, usb_key_value);
+  }
+
+  old_status.usb_key = next_key_nr;
+  return old_status;
+}
+
+bool key_status_diff(key_status_t s1, key_status_t s2){
+  return ( (s1.modifier != s2.modifier)
+        || (s1.usb_key != s2.usb_key) );
 }
 
 void handle_key_press(int key_idx, int key_state){
-      int key_nr = get_key_status(key_idx); //-1, 0, 1, 2, 3, 4, 5
-      int next_key_nr = UNASSIGNED_UP;
+
+      
+      key_status_t old_status = get_key_status(key_idx); //-1, 0, 1, 2, 3, 4, 5
       key_data_t key_data = get_key_data(key_idx);
       
-      if (should_update(key_state, key_nr)){
-        handle_special_keys(key_state, key_data);
-        Serial.print("KEY_IDX ");
-        Serial.print(key_idx);
-        Serial.println(" B");
+      if (should_update(key_state, old_status)){
         Serial.print("FN ");
         Serial.println(fn_layer);
-        int usb_key_value=0;
-        bool should_update_usb = false;
-        
-        if (key_state == HIGH){
-          Serial.println("KEY DOWN");
-          key_nr = get_free_key_nr();
-          next_key_nr = key_nr;
-          usb_key_value = key_data.hid_code;
-          ++n_pressed_keys;
-        }
-        else{
-          Serial.println("KEY UP");
-          return_key_nr(key_nr);     
-          next_key_nr = UNASSIGNED_UP;
-          usb_key_value = HID_RELEASED;
-          --n_pressed_keys;
-        }
 
-        should_update_usb = set_usb_key(key_nr, usb_key_value);        
-        Serial.print("key_nr ");
-        Serial.print(key_nr);
-        Serial.print(" usb_key ");
-        Serial.print(usb_key_value);
-        Serial.println(" 3");
+        key_status_t new_status = update_usb_keys(key_state, old_status, key_data);
+        new_status = update_modifiers(key_state, new_status, key_data);
+        new_status = update_special_keys(key_state, new_status, key_data);
         
-        if (update_modifiers(key_state, key_data.modifier)){
-          Serial.println("Update modifier");
-          Serial.println(g_modifiers, BIN);
-          Keyboard.set_modifier(g_modifiers);
-        }
-
+        new_status.state = key_state;
+        key_status[key_idx] = new_status;
         
-        if (should_update_usb){
-          send_usb(); 
+        if (key_status_diff(new_status, old_status)){
+          send_usb();
         }
-
-        Serial.print("next status");
-        Serial.println(next_key_nr);
-        set_status(key_idx, next_key_nr);
       }
 }
 

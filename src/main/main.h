@@ -1,6 +1,6 @@
 typedef struct key_data_t{
   int modifier;
-  int hid_code;
+  int value;
 }key_data_t;
 
 typedef struct key_status_t{
@@ -9,6 +9,7 @@ typedef struct key_status_t{
   //The index in the reported usb_keys if it has been been previously assigned
   //UNASSIGNED_USB_KEY otherwise.
   int usb_key;
+  int state;
 } key_status_t;
 
 const int MAX_LEN = 48;
