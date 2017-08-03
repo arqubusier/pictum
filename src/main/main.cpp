@@ -401,17 +401,16 @@ bool set_usb_key(int usb_key, int value){
 // returns 0 if no change, and 1 if there is an update
 key_status_t update_modifiers(int key_state,  key_status_t old_status, key_data_t key_data){
   uint8_t old_modifiers = g_modifiers;
-  modifier = key_data.modifier;
 
   int counter = 0;
-  
-  int modifier = key_data.modifier;
-  if (modifier == MODIFIER_NONE)
-      return old_status;
-  
-  counter = modifier_counters[modifier];      
-  
+  int modifier = 0;
+
   if (key_state == HIGH){
+    modifier = key_data.modifier;
+    if (modifier == MODIFIER_NONE)
+      return old_status;
+    counter = modifier_counters[modifier]; 
+    
     if (counter == 0){
       bitSet(g_modifiers, modifier);
       old_status.modifier = modifier;
@@ -420,6 +419,11 @@ key_status_t update_modifiers(int key_state,  key_status_t old_status, key_data_
     modifier_counters[modifier] = counter + 1;
   }
   else if (key_state == LOW){
+    modifier = old_status.modifier;
+    if (modifier == MODIFIER_NONE)
+      return old_status;
+      
+    counter = modifier_counters[modifier];
     if (counter == 1){
       bitClear(g_modifiers,modifier);
       old_status.modifier = MODIFIER_NONE;
