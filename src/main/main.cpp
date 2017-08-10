@@ -6,49 +6,71 @@
 uint8_t g_modifiers = 0x00;
 
 typedef struct stack_t{
-  int head;
-  int arr[MAX_LEN];
+  void *head;
+  const void *start;
+  const size_t elem_sz;
+  const size_t n_elems;
 } stack_t;
 
-void stack_init(stack_t *s){
-  s->head = -1;
+const size_t USB_KEYS_LEN = 6;
+int usb_keys_mem[USB_KEYS_LEN];
+const size_t PRESSED_KEYS_LEN = 48;
+key_data_t pressed_keys_mem[PRESSED_KEYS_LEN];
+
+
+
+//void stack_init(stack_t *s, void *start, size_t elem_sz, size_t n_elems){
+//  s->head = start;
+//  s->start = start;
+//  s->elem_sz = elem_sz;
+//  s->n_elems = n_elems;
+//}
+
+void print_int(void *val){
+    int int_val = (*((int*) val));
+    Serial.print(int_val);
 }
 
+void stack_print(stack_t *s, void (*elem_print)(void*)){
+  int i = 0;
+  void *current = (void*)s->start;
+
+  Serial.println("Printing stack");
+  for (;i< s->n_elems; ++i){
+    elem_print(current);
+    current += s->elem_sz;
+    Serial.println(",");
+  }
+  Serial.println("Stack END");
+}
 
 bool stack_is_empty(stack_t *s){
-  return s->head == -1;
+  return s->head == s->start;
 }
   
-void stack_push(stack_t *s, int val){
-  if (s->head < MAX_LEN){
-    ++(s->head);
-    s->arr[s->head] = val;
+void stack_push(stack_t *s, void *val){
+  const void *end = s->start + s->n_elems*s->elem_sz;
+  if (s->head != end){
+    memcpy(s->head, val, s->elem_sz);
+    s->head += s->elem_sz;
   }
 }
 
-int stack_pop(stack_t *s){
+const void *stack_pop(stack_t *s){
   if (stack_is_empty(s))
-    return -1;
+    return s->head;
   
-  int val = s->arr[s->head];
-  --(s->head);
+  void *val = s->head;
+  s->head -= s->elem_sz;
   return val;
 }
 
-int stack_size(stack_t *s){
-  return s->head;
-}
-
-int stack_peek(stack_t *s){
-  if (stack_is_empty(s)){
-    return -1;
-  }
-
-  return s->arr[0];
+const void *stack_peek(stack_t *s){
+  return s->start;
 }
 
 
-stack_t free_keys;
+stack_t free_keys = {usb_keys_mem, usb_keys_mem, sizeof(int), USB_KEYS_LEN};
 
 //#define DEBUG
 
@@ -204,6 +226,8 @@ key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN}
 };
 
+key_data_t last_pressed_key = {MODIFIER_NONE, 0};
+
 key_status_t key_status[N_COLS*N_ROWS];
 unsigned int modifier;
 
@@ -266,14 +290,20 @@ void init_main() {
   for (;c<N_IN_PINS;++c){
     pinMode(COL_PINS[c], INPUT_PULLDOWN);
   }
-
-  stack_init(&free_keys);
-  stack_push(&free_keys, 5);
-  stack_push(&free_keys, 4);
-  stack_push(&free_keys, 3);
-  stack_push(&free_keys, 2);
-  stack_push(&free_keys, 1);
-  stack_push(&free_keys, 0);
+  delay(1000);
+  int val = 5;
+  stack_push(&free_keys, &val);
+  stack_print(&free_keys, &print_int);
+  val = 4;
+  stack_push(&free_keys, &val);
+  val = 3;
+  stack_push(&free_keys, &val);
+  val = 2;
+  stack_push(&free_keys, &val);
+  val = 1;
+  stack_push(&free_keys, &val);
+  val = 0;
+  stack_push(&free_keys, &val);
   
   i2c_init();
   mcp23018_init();
@@ -282,8 +312,7 @@ void init_main() {
   set_int_array(modifier_counters, N_MODIFIERS, 0);
   set_int_array(active_layers, N_MODIFIERS, 0);
   modifier=0;
-
-  delay(1000);
+  
   Serial.println("Finish Init");
 }
 
@@ -350,12 +379,12 @@ int get_free_key_nr(){
     return -1;
   }
 
-  int res = stack_pop(&free_keys);
+  int res = *( (int*)stack_pop(&free_keys) );
   return res;
 }
 
 void return_key_nr(int key_nr){
-  stack_push(&free_keys, key_nr);
+  stack_push(&free_keys, &key_nr);
 }
 
 void send_usb(){
@@ -514,6 +543,7 @@ key_status_t update_usb_keys(int key_state, key_status_t old_status, key_data_t 
     usb_key_value = key_data.value;
     ++n_pressed_keys;
     set_usb_key(next_key_nr, usb_key_value);
+    stack_print(&free_keys, &print_int);
   }
   else{
     Serial.println("KEY UP");
@@ -522,6 +552,7 @@ key_status_t update_usb_keys(int key_state, key_status_t old_status, key_data_t 
     usb_key_value = HID_RELEASED;
     --n_pressed_keys;
 
+    stack_print(&free_keys, &print_int);
     set_usb_key(old_status.usb_key, usb_key_value);
   }
 
