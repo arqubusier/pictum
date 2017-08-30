@@ -5,6 +5,92 @@
 
 uint8_t g_modifiers = 0x00;
 
+typedef struct queue{
+  int first;
+  int last;
+  int count;
+  int q_len;
+  int *q;
+} queue;
+
+#define INIT_QUEUE(mem, len) {.first=0, .last=len-1, .count=0, .q_len=len, .q=mem} 
+
+void enqueue(queue *q, int x){
+  if (q->count >= q->q_len)
+    Serial.print("WARNING: queue overflow");
+  else{
+    q->last = (q->last+1) % q->q_len;
+    q->q[q->last] = x;
+    q->count = q->count + 1;
+  }
+}
+
+int dequeue(queue *q){
+  int x;
+  
+  if (q->count <= 0)
+    Serial.print("WARNING: empty queue dequeue");
+  else {
+    x = q->q[q->first];
+    q->first = (q->first+1) % q->q_len;
+    q->count = q->count - 1;
+  }
+}
+
+int queue_is_empty(queue *q){
+  if (q->count <= 0) return 1;
+  return 0;
+}
+
+void print_queue(queue *q){
+  int i;
+  i=q->first;
+
+  if (queue_is_empty){
+    Serial.println("Queue is empty");
+  }
+
+  while (i != q->last){
+    Serial.print(q->q[i]);
+    Serial.print(", ");
+    i = (i+1) % q->q_len;
+  }
+  
+  Serial.print(q->q[i]);
+  Serial.println();
+}
+
+typedef struct list_elem_t{
+  void *data;
+  list_elem_t *prev;
+  list_elem_t *next;
+} list_elem_t;
+
+typedef struct list_t{
+  list_elem_t *head;
+} list_t;
+
+list_elem_t *LIST_END = NULL;
+
+void list_push_front(list_t *list, void *val){
+  ;
+}
+
+void list_peek(list_t *list, void *res, size_t elem_sz){
+  memcpy(res, list->head, elem_sz);
+}
+
+void list_delete(list_t *list, list_elem_t *element){
+  //Head is deleted, the new head needs to be set
+  if (element->prev == LIST_END){
+    list->head = element->next;
+    return;
+  }
+
+  list_elem_t *prev = element->prev;
+  prev->next = element->next;
+}
+
 typedef struct stack_t{
   void *head;
   const void *start;
@@ -12,12 +98,25 @@ typedef struct stack_t{
   const size_t n_elems;
 } stack_t;
 
+#define INIT_STACK(mem, sz, n) {mem, mem, mem, sz, n}
+
 const size_t USB_KEYS_LEN = 6;
 int usb_keys_mem[USB_KEYS_LEN];
+const size_t ONE_SHOT_KEYS_LEN = 48;
+
 const size_t PRESSED_KEYS_LEN = 48;
-key_data_t pressed_keys_mem[PRESSED_KEYS_LEN];
+int pressed_keys_mem[PRESSED_KEYS_LEN];
+
+key_data_t pressed_keys[PRESSED_KEYS_LEN];
 
 
+typedef struct store_t{
+  void *mem;
+  stack_t *free_slots;
+  const size_t elem_sz;  
+} store_t;
+
+key_data_t last_pressed_key = {MODIFIER_NONE, 0};
 
 //void stack_init(stack_t *s, void *start, size_t elem_sz, size_t n_elems){
 //  s->head = start;
@@ -27,8 +126,16 @@ key_data_t pressed_keys_mem[PRESSED_KEYS_LEN];
 //}
 
 void print_int(void *val){
-    int int_val = (*((int*) val));
+    int int_val = *((int*) val);
     Serial.print(int_val);
+}
+
+void print_key_data(void *val){
+  key_data_t key_val = *((key_data_t*) val);
+  Serial.print("mod: ");
+  Serial.print(key_val.modifier);
+  Serial.print("val: ");
+  Serial.print(key_val.value);
 }
 
 void stack_print(stack_t *s, void (*elem_print)(void*)){
@@ -56,13 +163,12 @@ void stack_push(stack_t *s, void *val){
   }
 }
 
-const void *stack_pop(stack_t *s){
+void stack_pop(stack_t *s, void *res){
   if (stack_is_empty(s))
-    return s->head;
+    return;
   
-  void *val = s->head;
   s->head -= s->elem_sz;
-  return val;
+  memcpy(res, s->head, s->elem_sz);
 }
 
 const void *stack_peek(stack_t *s){
@@ -70,7 +176,13 @@ const void *stack_peek(stack_t *s){
 }
 
 
-stack_t free_keys = {usb_keys_mem, usb_keys_mem, sizeof(int), USB_KEYS_LEN};
+stack_t free_usb_keys = {usb_keys_mem, usb_keys_mem, sizeof(int), USB_KEYS_LEN};
+stack_t next_key_number = {pressed_keys_mem, pressed_keys_mem, sizeof(int), PRESSED_KEYS_LEN};
+
+int one_shot_keys_mem[MAX_LEN];
+queue one_shot_keys_fifo = INIT_QUEUE(one_shot_keys_mem, MAX_LEN);
+
+int normal_usb_keys[USB_KEYS_LEN];
 
 //#define DEBUG
 
@@ -108,7 +220,6 @@ const int MAX_N_USB_KEYS = 6;
 int fn_l = 0;
 int fn_r = 0;
 int fn_layer = 0;
-int n_pressed_keys = 0;
 
 int active_layers[N_FN_LAYERS] = {0};
 
@@ -226,8 +337,6 @@ key_data_t key_map[N_COLS*N_ROWS*N_FN_LAYERS] =
     {MODIFIER_NONE, 0}, {MODIFIER_LALT, 0}, {MODIFIER_NONE, KEY_SW_PGUP}, {MODIFIER_NONE, KEY_SW_END}, {MODIFIER_NONE, 0}, {MODIFIER_NONE, KEY_SW_PGDOWN}
 };
 
-key_data_t last_pressed_key = {MODIFIER_NONE, 0};
-
 key_status_t key_status[N_COLS*N_ROWS];
 unsigned int modifier;
 
@@ -292,18 +401,23 @@ void init_main() {
   }
   delay(1000);
   int val = 5;
-  stack_push(&free_keys, &val);
-  stack_print(&free_keys, &print_int);
+  stack_push(&free_usb_keys, &val);
+  stack_print(&free_usb_keys, &print_int);
   val = 4;
-  stack_push(&free_keys, &val);
+  stack_push(&free_usb_keys, &val);
   val = 3;
-  stack_push(&free_keys, &val);
+  stack_push(&free_usb_keys, &val);
   val = 2;
-  stack_push(&free_keys, &val);
+  stack_push(&free_usb_keys, &val);
   val = 1;
-  stack_push(&free_keys, &val);
+  stack_push(&free_usb_keys, &val);
   val = 0;
-  stack_push(&free_keys, &val);
+  stack_push(&free_usb_keys, &val);
+
+  int i = PRESSED_KEYS_LEN-1;
+  for (;i>=0; --i){
+    stack_push(&next_key_number, &i);
+  }
   
   i2c_init();
   mcp23018_init();
@@ -375,16 +489,19 @@ void read_matrix_local(int *out_buff){
 
 
 int get_free_key_nr(){
-  if (stack_is_empty(&free_keys)){
+  if (stack_is_empty(&free_usb_keys)){
     return -1;
   }
 
-  int res = *( (int*)stack_pop(&free_keys) );
+  int res;
+  stack_pop(&free_usb_keys, &res);
+  Serial.println("AAAA");
+  Serial.println(res);
   return res;
 }
 
 void return_key_nr(int key_nr){
-  stack_push(&free_keys, &key_nr);
+  stack_push(&free_usb_keys, &key_nr);
 }
 
 void send_usb(){
@@ -421,7 +538,7 @@ bool should_update(int key_state, key_status_t old_status){
 bool set_usb_key(int usb_key, int value){
   if (usb_key >= 0 && usb_key <= MAX_N_USB_KEYS
         && value<HID_MAX){
-    keyboard_keys[usb_key] = value;
+    normal_usb_keys[usb_key] = value;
     return true;
   }
   return false;
@@ -430,7 +547,8 @@ bool set_usb_key(int usb_key, int value){
 // Updates modifers
 // More than one key per modifier is supported
 // returns 0 if no change, and 1 if there is an update
-key_status_t update_modifiers(int key_state,  key_status_t old_status, key_data_t key_data){
+void update_modifiers(int key_state,  key_status_t *old_status, int key_idx, key_data_t *pressed_keys){
+  key_data_t key_data = get_key_data(key_idx);
   uint8_t old_modifiers = g_modifiers;
 
   int counter = 0;
@@ -442,7 +560,7 @@ key_status_t update_modifiers(int key_state,  key_status_t old_status, key_data_
       Serial.println(modifier);
     if (modifier == MODIFIER_NONE){
       Serial.println("return");
-      return old_status;
+      return;
     }
     counter = modifier_counters[modifier]; 
     
@@ -451,23 +569,23 @@ key_status_t update_modifiers(int key_state,  key_status_t old_status, key_data_
       Serial.print("SEEET");
     }
 
-    old_status.modifier = modifier;
+    old_status->modifier = modifier;
     modifier_counters[modifier] = counter + 1;
   }
   else if (key_state == LOW){
-    modifier = old_status.modifier;
+    modifier = old_status->modifier;
     
       Serial.print("OLD ");
       Serial.println(modifier);
     if (modifier == MODIFIER_NONE){
       Serial.println("return");
-      return old_status;
+      return;
     }
       
     counter = modifier_counters[modifier];
     if (counter == 1){
       bitClear(g_modifiers,modifier);
-      old_status.modifier = MODIFIER_NONE;
+      old_status->modifier = MODIFIER_NONE;
       Serial.print("UUUUUNSET");
     }
 
@@ -480,21 +598,23 @@ key_status_t update_modifiers(int key_state,  key_status_t old_status, key_data_
   Serial.print("COUNTER");
   Serial.println(modifier_counters[modifier]);
   Keyboard.set_modifier(g_modifiers);
-
-  return old_status;
 }
 
 /*
  * The currently activated function Layer with the highest number determines the layer
  * 
  */
-key_status_t update_special_keys(int key_state, key_status_t old_status, key_data_t key_data){
+void update_special_keys(int key_state, key_status_t *old_status, int key_idx, key_data_t *pressed_keys){
+  key_data_t key_data = get_key_data(key_idx);
   int key_value = key_data.value;
 
   int layer = key_value - KEY_LAYER1 + 1;
   if ( !(layer >= 0 && layer < N_FN_LAYERS) ){
-    return old_status;
+    return;
   }
+
+  Serial.print(" PRESSED KEY ");
+  
   
   if (key_state == HIGH){
     active_layers[layer] = 1;
@@ -526,38 +646,70 @@ key_status_t update_special_keys(int key_state, key_status_t old_status, key_dat
     }
   //TODO RESET MODIFIERS
   }
-
-  return old_status;
 }
 
-key_status_t update_usb_keys(int key_state, key_status_t old_status, key_data_t key_data){
+void update_usb_keys(int key_state, key_status_t *old_status, int key_idx, key_data_t* pressed_keys){
+  key_data_t key_data = get_key_data(key_idx);
   if (key_data.value < HID_MIN or key_data.value > HID_MAX)
-    return old_status; 
+    return; 
 
   int next_key_nr = 0;
   int usb_key_value = 0;
+  bool is_one_shot = (key_data.value != 0 && key_data.modifier != MODIFIER_NONE);
   
   if (key_state == HIGH){
     Serial.println("KEY DOWN");
     next_key_nr = get_free_key_nr();
     usb_key_value = key_data.value;
-    ++n_pressed_keys;
     set_usb_key(next_key_nr, usb_key_value);
-    stack_print(&free_keys, &print_int);
+    Serial.println("KEYNR ");
+    Serial.println(next_key_nr);
+    stack_print(&free_usb_keys, &print_int);
   }
-  else{
+  else if(!is_one_shot && key_state == LOW){
     Serial.println("KEY UP");
-    return_key_nr(old_status.usb_key);     
+    return_key_nr(old_status->usb_key);     
     next_key_nr = UNASSIGNED_UP;
     usb_key_value = HID_RELEASED;
-    --n_pressed_keys;
-
-    stack_print(&free_keys, &print_int);
-    set_usb_key(old_status.usb_key, usb_key_value);
+    
+    stack_print(&free_usb_keys, &print_int);
+    set_usb_key(old_status->usb_key, usb_key_value);
   }
 
-  old_status.usb_key = next_key_nr;
-  return old_status;
+  old_status->value = usb_key_value;
+  old_status->usb_key = next_key_nr;
+
+  if (is_one_shot && key_state == HIGH){
+      enqueue(&one_shot_keys_fifo, key_idx);
+  }
+}
+
+bool should_clear_one_shot = true;
+
+//NOTE: one shot keys overrides normal keys.
+bool handle_one_shot(){
+  if (!queue_is_empty(&one_shot_keys_fifo)){
+    if (should_clear_one_shot){
+      memset(keyboard_keys, 0, MAX_N_USB_KEYS);
+    }
+    else{
+      int key_idx = dequeue(&one_shot_keys_fifo);
+      
+      key_data_t key_data = get_key_data(key_idx);
+
+      if (key_data.value != 0)
+        keyboard_keys[0] = key_data.value;
+      if (key_data.modifier != MODIFIER_NONE){
+        g_modifiers = 0x00;
+        bitSet(g_modifiers,  key_data.modifier);
+      }
+    }
+
+    should_clear_one_shot = !should_clear_one_shot;
+    return true;
+  }
+  else
+    return false;
 }
 
 bool key_status_diff(key_status_t s1, key_status_t s2){
@@ -565,29 +717,39 @@ bool key_status_diff(key_status_t s1, key_status_t s2){
         || (s1.usb_key != s2.usb_key) );
 }
 
-void handle_key_press(int key_idx, int key_state){
+void update_pressed_keys(int key_state, key_status_t *old_status, key_data_t key_data, key_data_t *pressed_keys){
+  if (key_state == HIGH){
+    
+  }  
+  else if (key_state == LOW){
+  }
+  
+}
 
+bool handle_key_press(int key_idx, int key_state){
+      bool res = false;
       
       key_status_t old_status = get_key_status(key_idx); //-1, 0, 1, 2, 3, 4, 5
-      key_data_t key_data = get_key_data(key_idx);
-      
+            
       if (should_update(key_state, old_status)){
         Serial.print("FN ");
         Serial.println(fn_layer);
         Serial.print("KEY_IDX ");
         Serial.println(key_idx);
 
-        key_status_t new_status = update_usb_keys(key_state, old_status, key_data);
-        new_status = update_modifiers(key_state, new_status, key_data);
-        new_status = update_special_keys(key_state, new_status, key_data);
+        key_status_t new_status = old_status;
+        //update_pressed_keys(key_state, &new_status, key_idx, pressed_keys);
+        update_usb_keys(key_state, &new_status, key_idx, pressed_keys);
+        update_modifiers(key_state, &new_status, key_idx, pressed_keys);
+        update_special_keys(key_state, &new_status, key_idx, pressed_keys);
         
         new_status.state = key_state;
         key_status[key_idx] = new_status;
         
-        if (key_status_diff(new_status, old_status)){
-          send_usb();
-        }
+        res = key_status_diff(new_status, old_status);
       }
+
+      return res;
 }
 
 void run_main(){
@@ -598,8 +760,9 @@ void run_main(){
   set_int_array(out_buff, OUT_LEN, LOW);
   
   int out = 0;
+  bool should_update_usb = false;
 
-//  //Half with the teensy
+  //Half with the teensy
   for (out=0;out<N_OUT_PINS;++out){
     write_matrix_local(out);
     read_matrix_local(out_buff);
@@ -608,7 +771,8 @@ void run_main(){
     for (;in<N_IN_PINS;++in){
       int key_idx = local_key_address(out, in);
       int key_val = out_buff[in];
-      handle_key_press(key_idx, key_val);
+      if (handle_key_press(key_idx, key_val))
+        should_update_usb = true;
     }
   }
 
@@ -621,7 +785,15 @@ void run_main(){
     for (;in<N_IN_REMOTES;++in){
       int key_idx = remote_key_address(out, in);
       int key_val = out_buff[in];
-      handle_key_press(key_idx, key_val);
+      if (handle_key_press(key_idx, key_val))
+        should_update_usb = true;
     }
+  }
+
+  should_update_usb = handle_one_shot();
+  
+  if (should_update_usb){
+    Serial.println("SSSSSSSSSSSEEEEEND");
+    send_usb();
   }
 }

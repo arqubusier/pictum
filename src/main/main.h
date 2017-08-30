@@ -10,6 +10,8 @@ typedef struct key_status_t{
   //UNASSIGNED_USB_KEY otherwise.
   int usb_key;
   int state;
+  int key_nr; //The order this key was when pressed
+  int value;
 } key_status_t;
 
 const int MAX_LEN = 48;
