@@ -3,6 +3,9 @@ typedef struct key_data_t{
   int value;
 }key_data_t;
 
+
+
+
 typedef struct key_status_t{
   //The current effect the key has on the modifiers
   int modifier;
@@ -12,6 +15,7 @@ typedef struct key_status_t{
   int state;
   int key_nr; //The order this key was when pressed
   int value;
+  bool is_masking;
 } key_status_t;
 
 const int MAX_LEN = 48;
