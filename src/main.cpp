@@ -3,8 +3,9 @@
 #define DEBUG
 
 const int N_INPUTS = 6;
-const int INPUT_PINS[] = {0, 1, 2, 3, 4, 5};
-const int OUTPUT_PINS[] = {6, 7, 8, 9};
+const int N_OUTPUTS = 4;
+const int INPUT_PINS[N_INPUTS] = {0, 1, 2, 3, 4, 5};
+const int OUTPUT_PINS[N_OUTPUTS] = {6, 7, 8, 9};
 
 void write_matrix(int input_idx){
     int prev_input_idx = (input_idx - 1 + N_INPUTS)%N_INPUTS;
@@ -18,13 +19,20 @@ void write_matrix(int input_idx){
 }
 
 void setup_matrix(){
-    int input_idx=0;
+    int idx=0;
     int pin=0;
-    for (input_idx=0; input_idx<N_INPUTS; input_idx++)
+    for (idx=0; idx<N_INPUTS; idx++)
     {
-        pin = INPUT_PINS[input_idx];
+        pin = INPUT_PINS[idx];
         pinMode(pin, OUTPUT);
         digitalWrite(pin, LOW);
+    }
+
+    for (idx=0; idx<N_OUTPUTS; idx++)
+    {
+        pin = OUTPUT_PINS[idx];
+        pinMode(pin, INPUT);
+        *portConfigRegister(pin) &= ~PORT_PCR_PS; //pull down
     }
 }
 
@@ -47,7 +55,6 @@ extern "C" int main(void)
             while (Serial.available() <= 0)
                 ;//wait for input
             incomingByte = Serial.read();
-
             // say what you got:
             Serial.print("I received: ");
             Serial.println(incomingByte, DEC);
