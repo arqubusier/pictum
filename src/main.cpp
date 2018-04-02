@@ -17,6 +17,17 @@ void write_matrix(int input_idx){
     #endif
 }
 
+void setup_matrix(){
+    int input_idx=0;
+    int pin=0;
+    for (input_idx=0; input_idx<N_INPUTS; input_idx++)
+    {
+        pin = INPUT_PINS[input_idx];
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+    }
+}
+
 extern "C" int main(void)
 {
 #ifdef USING_MAKEFILE
@@ -25,9 +36,10 @@ extern "C" int main(void)
 	// For example:
 
 	pinMode(13, OUTPUT);
+    setup_matrix();
+
     int incomingByte = 0;
     int input_idx = 0;
-    int prev_input_idx = 0;
 	while (1) {
         for (input_idx=0; input_idx<N_INPUTS; ++input_idx){
             write_matrix(input_idx);
